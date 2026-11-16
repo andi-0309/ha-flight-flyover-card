@@ -12,19 +12,25 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install pinned build dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build single shared Three.js bundle
+        run: npm run build
       - name: Check JavaScript syntax
-        run: node --check dist/ha-flight-flyover-card.js
+        run: |
+          node --check src/ha-flight-flyover-card.js
+          node --check dist/ha-flight-flyover-card.js
       - name: Run unit tests
-        run: node --test tests/*.test.cjs
-      - name: Validate Marketplace metadata and distribution
+        run: npm test
+      - name: Validate Marketplace package
         run: |
           node -e 'const fs=require("fs");const h=JSON.parse(fs.readFileSync("hacs.json","utf8"));if(h.filename!=="ha-flight-flyover-card.js"||!fs.existsSync("dist/"+h.filename)){process.exit(1)}'
+          node -e 'const fs=require("fs");const b=fs.readFileSync("dist/ha-flight-flyover-card.js","utf8");if(b.includes("esm.sh/three")||b.includes("GLTFLoader.js?bundle"))process.exit(1)'
 
   release:
     needs: test
@@ -36,10 +42,28 @@ jobs:
       group: flight-flyover-marketplace-release
       cancel-in-progress: false
     steps:
-      - name: Checkout full history and tags
+      - name: Checkout current branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned build dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build distribution asset
+        run: npm run build
+      - name: Keep the distribution in main in sync
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/ha-flight-flyover-card.js
+          if ! git diff --cached --quiet; then
+            git commit -m "build: sync bundled marketplace asset [skip ci]"
+            git push origin HEAD:main
+          fi
       - name: Determine next stable patch version
         id: version
         shell: bash
@@ -53,12 +77,12 @@ jobs:
             next="v${major}.${minor}.$((patch + 1))"
           fi
           echo "version=$next" >> "$GITHUB_OUTPUT"
-      - name: Publish stable Marketplace release with installable module
+      - name: Publish Marketplace release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "$VERSION" dist/ha-flight-flyover-card.js \
-            --target "$GITHUB_SHA" \
+            --target "$(git rev-parse HEAD)" \
             --title "$VERSION" \
             --generate-notes
