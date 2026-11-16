@@ -6,74 +6,108 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 // Raw GitHub model paths are CORS-enabled in browsers; release download URLs
 // are not reliably CORS-enabled and must not be used by GLTFLoader.
-const FR24_BASE="https://raw.githubusercontent.com/Flightradar24/fr24-3d-models/master/models/";
+// Every asset is glTF 2.0. Flightradar24's public GLBs are glTF 1.0 and
+// cannot be loaded by the Three.js GLTFLoader, so they must not be attempted.
 const FLIGHTAIRMAP_BASE="https://raw.githubusercontent.com/Ysurac/FlightAirMap-3dmodels/master/";
 const AMVLAB_BASE="https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/";
-const CC_BY_BASE="https://raw.githubusercontent.com/WorldPixelMap/android-gods-eye-view/main/public/models/";
-const FR24_MODELS=Object.freeze({
-  A318:"a318.glb",A319:"a319.glb",A321:"a321.glb",
-  A330:"a333.glb",A340:"a346.glb",
-  B736:"b736.glb",B737:"b737.glb",B738:"b738.glb",B739:"b739.glb",
-  B744:"b744.glb",B748:"b748.glb",
-  B752:"b752.glb",B753:"b753.glb",
-  B762:"b762.glb",B763:"b763.glb",B764:"b764.glb",
-  B772:"b772.glb",B773:"b773.glb",B777:"b773.glb",
-  B788:"b788.glb",B789:"b789.glb",
-  E170:"e170.glb",E190:"e190.glb",E195:"e190.glb",
-  ATR42:"atr42.glb",CRJ7:"crj700.glb",CRJ9:"crj900.glb",
-  DH8D:"q400.glb",BAE146:"bae146.glb",
-  CITATION:"citation.glb",GLIDER:"ask21.glb",HELI:"heli.glb",
-  PA28:"pa28.glb"
-});
+const GEV_BASE="https://raw.githubusercontent.com/WorldPixelMap/android-gods-eye-view/main/public/models/";
+// Per-FILE forward axes, determined from cockpit / tail / prop geometry
+// in GLB world coordinates (including node transforms). Do not infer by
+// upstream repository: Boeing 757 points +X, but its 747 points +Z.
 const FLIGHTAIRMAP_MODELS=Object.freeze({
-  A220:"bcs1/glTF2/BCS3.glb",A332:"a332/glTF2/A332.glb",
-  A330:"a333/glTF2/A333.glb",
-  B744:"b744/glTF2/B747.glb",B748:"b748/glTF2/B748.glb",
-  B752:"b752/glTF2/B752.glb",B763:"b767/glTF2/B763.glb",
-  E170:"e190/glTF2/E170.glb",E175:"e190/glTF2/E75L.glb",
-  E190:"e190/glTF2/E190.glb",E195:"e190/glTF2/E190.glb",
-  E145:"e145/glTF2/E145.glb",
-  C182:"c182/glTF2/C182.glb",C208:"c208/glTF2/C208.glb",
-  C310:"c421/glTF2/C421.glb",PA28:"pa28/glTF2/PA28.glb",
-  PA18:"pa18/output/pa18.glb",PA22:"pa22/output/pa22.glb",
-  PA32:"pa32/output/pa32.glb",DR40:"dr40/output/dr40.glb",
-  SR22:"sr22/output/sr22.glb",PC12:"pc12/output/pc12.glb",
-  BE20:"c421/glTF2/C421.glb",DA42:"c421/glTF2/C421.glb",
-  FK9:"ulac/output/ulac.glb",CITATION:"c550/glTF2/C550.glb",
-  CL60:"c550/glTF2/C550.glb",LEGACY:"c550/glTF2/C550.glb",
-  ATR72:"atr72/glTF2/AT75.glb",ATR42:"atr42/glTF2/AT45.glb",
-  DH8C:"dhc4/output/dhc4.glb",DH8D:"dhc4/glTF2/DHC4.glb",
-  CRJ2:"crj2/glTF2/CRJ2.glb",CRJ7:"crj9/glTF2/CRJ7.glb",
-  CRJ9:"crj9/glTF2/CRJ9.glb",
-  B707:"b707/output/707.glb",MD11:"md11/output/md11.glb",
-  GLIDER:"ask21/glTF2/AS21.glb",HELI:"ec35/glTF2/EC35.glb",
-  B407:"b407/glTF2/B407.glb"
+  A220:["bcs1/glTF2/BCS3.glb","+Z"], // A220 family
+  A318:["a320/glTF2/A318.glb","+Z"],
+  A319:["a320/glTF2/A319.glb","+Z"],
+  A321:["a320/glTF2/A321.glb","+Z"],
+  A332:["a332/glTF2/A332.glb","+Z"],
+  A330:["a333/glTF2/A333.glb","+Z"],
+  A340:["a343/glTF2/A343.glb","+Z"],
+  B744:["b744/glTF2/B747.glb","+Z"],
+  B748:["b748/glTF2/B748.glb","+Z"],
+  B752:["b752/glTF2/B752.glb","+X"], // exception: cockpit +X, tail -X
+  B763:["b767/glTF2/B763.glb","+Z"],
+  B788:["b788/glTF2/B788.glb","+Z"],
+  E170:["e190/glTF2/E170.glb","+Z"],
+  E175:["e190/glTF2/E75L.glb","+Z"],
+  E190:["e190/glTF2/E190.glb","+Z"],
+  E195:["e190/glTF2/E190.glb","+Z"],
+  E145:["e145/glTF2/E145.glb","+Z"],
+  C182:["c182/glTF2/C182.glb","+Z"],
+  C208:["c208/glTF2/C208.glb","+Z"],
+  C310:["c421/glTF2/C421.glb","+Z"], // similar light twin
+  PA28:["pa28/glTF2/PA28.glb","+Z"],
+  PA18:["pa18/glTF2/PA18.glb","-Z"],
+  PA22:["pa22/glTF2/PA22.glb","+Z"],
+  PA32:["pa32/glTF2/PA32.glb","+Z"],
+  DR40:["dr40/glTF2/DR40.glb","+Z"],
+  SR22:["sr22/glTF2/SR22.glb","+Z"],
+  PC12:["pc12/glTF2/PC12.glb","+Z"],
+  BE20:["c421/glTF2/C421.glb","+Z"], // approximate light twin
+  DA42:["c421/glTF2/C421.glb","+Z"], // approximate light twin
+  CITATION:["c550/glTF2/C550.glb","+Z"],
+  CL60:["c550/glTF2/C550.glb","+Z"], // similar light jet
+  LEGACY:["c550/glTF2/C550.glb","+Z"], // similar light jet
+  ATR42:["atr42/glTF2/AT45.glb","+Z"],
+  ATR72:["atr72/glTF2/AT75.glb","+Z"],
+  DH8C:["dhc4/glTF2/DHC4.glb","+Z"],
+  DH8D:["dhc4/glTF2/DHC4.glb","+Z"], // regional turboprop approximation
+  CRJ2:["crj2/glTF2/CRJ2.glb","+Z"],
+  CRJ7:["crj9/glTF2/CRJ7.glb","+Z"],
+  CRJ9:["crj9/glTF2/CRJ9.glb","+Z"],
+  GLIDER:["ask21/glTF2/AS21.glb","+Z"],
+  HELI:["ec35/glTF2/EC35.glb","+Z"],
+  B407:["b407/glTF2/B407.glb","+Z"]
 });
-const AMVLAB_MODELS=new Set(["A320","A350","A380","B787"]);
+const AMVLAB_MODELS=Object.freeze({
+  A320:["A320_nologo.glb","+X"], A350:["A350_nologo.glb","+X"],
+  A380:["A380_nologo.glb","+X"], B737:["B737_nologo.glb","+X"],
+  B787:["B787_nologo.glb","+X"]
+});
+const GEV_MODELS=Object.freeze({
+  C172:["c172.glb","-X"],
+  B789:["b789.glb","-X"],
+  B747:["airplane.glb","-X"],
+  ATR72:["atr72.glb","-X"],
+  CITATION:["citation2.glb","-X"],
+  B407:["bell206.glb","-X"]
+});
 function modelCandidates(type) {
   const paths=[];
-  const add=(url,forward)=>{if(!paths.some(x=>x.url===url))paths.push({url,forward});};
-  if(AMVLAB_MODELS.has(type))add(AMVLAB_BASE+type+"_nologo.glb","+X");
-  if(type==="C172")add(CC_BY_BASE+"c172.glb","-X");
-  if(FR24_MODELS[type])add(FR24_BASE+FR24_MODELS[type],"+X");
-  if(FLIGHTAIRMAP_MODELS[type])add(FLIGHTAIRMAP_BASE+FLIGHTAIRMAP_MODELS[type],"+X");
-  if(type==="B407")add(CC_BY_BASE+"bell206.glb","-X");
-  // Fall back within the same family if a specific mesh is temporarily down.
-  const family={
-    A332:"A330",B748:"B744",B772:"B773",B777:"B773",
-    B762:"B763",B764:"B763",B753:"B752",E175:"E170",
-    E195:"E190",CRJ9:"CRJ7",CRJ2:"CRJ7",ATR42:"ATR72",
-    C182:"C172",C208:"C172",PA18:"PA28",DR40:"PA28",
-    DA42:"C310",BE20:"C310",FK9:"C172",PA32:"PA28",
-    SR22:"PA28",PC12:"PA28",LEGACY:"CITATION",CL60:"CITATION",
-    B407:"HELI"
+  const add=(base,meta)=> {
+    if(!meta)return;
+    const [file,forward]=meta;
+    const url=base+file;
+    if(!paths.some(item=>item.url===url))paths.push({url,forward});
+  };
+  add(AMVLAB_BASE,AMVLAB_MODELS[type]);
+  add(GEV_BASE,GEV_MODELS[type]);
+  add(FLIGHTAIRMAP_BASE,FLIGHTAIRMAP_MODELS[type]);
+  // Use the closest available airframe if the exact type is missing or down.
+  const fallback={
+    A220:"A319",A332:"A330",A340:"A330",
+    B736:"B737",B738:"B737",B739:"B737",
+    B744:"B747",B748:"B744",B752:"B737",
+    B762:"B763",B764:"B763",
+    B772:"B789",B773:"B789",B777:"B789",
+    B788:"B787",B789:"B787",
+    E175:"E170",E195:"E190",
+    CRJ9:"CRJ7",CRJ2:"CRJ7",
+    ATR42:"ATR72",
+    C182:"C172",C208:"C172",
+    PA18:"PA28",PA22:"PA28",PA32:"PA28",DR40:"PA28",
+    SR22:"PA28",PC12:"PA28",
+    DA42:"C310",BE20:"C310",FK9:"C172",
+    B407:"HELI",LEGACY:"CITATION",CL60:"CITATION",
+    DH8D:"ATR72",DH8C:"ATR72",
+    B707:"B737",MD11:"B787",BAE146:"E190",
+    SF34:"ATR72",CITATION:"B789",GLIDER:"C172"
   }[type];
-  if(family){
-    if(FR24_MODELS[family])add(FR24_BASE+FR24_MODELS[family],"+X");
-    if(FLIGHTAIRMAP_MODELS[family])add(FLIGHTAIRMAP_BASE+FLIGHTAIRMAP_MODELS[family],"+X");
-    if(family==="C172")add(CC_BY_BASE+"c172.glb","-X");
+  if(fallback){
+    add(AMVLAB_BASE,AMVLAB_MODELS[fallback]);
+    add(GEV_BASE,GEV_MODELS[fallback]);
+    add(FLIGHTAIRMAP_BASE,FLIGHTAIRMAP_MODELS[fallback]);
   }
-  if(type!=="A320")add(AMVLAB_BASE+"A320_nologo.glb","+X");
+  if(type!=="A320")add(AMVLAB_BASE,AMVLAB_MODELS.A320);
   return paths;
 }
 function normalizeNose(angle) {
@@ -489,9 +523,13 @@ class FlightFlyoverCard extends HTMLElement {
         for(const candidate of modelCandidates(name)){
           try {
             const result=await loader.loadAsync(candidate.url);
+            // Rotate a dedicated pivot, never overwrite an imported glTF
+            // root's existing rotation. Model-specific axes survive fallbacks.
             const scene=new THREE.Group();
-            result.scene.rotation.y=normalizeNose(candidate.forward);
-            scene.add(result.scene);
+            const aligned=new THREE.Group();
+            aligned.rotation.y=normalizeNose(candidate.forward);
+            aligned.add(result.scene);
+            scene.add(aligned);
             scene.updateMatrixWorld(true);
             const bounds=new THREE.Box3().setFromObject(scene);
             const center=bounds.getCenter(new THREE.Vector3());
