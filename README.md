@@ -11,25 +11,27 @@ A Home Assistant Lovelace custom card (MVP): when the [Flightradar24 integration
 - Frame rate capped at 20 FPS by default, pixel ratio 1, no animation/rendering when idle.
 - Compass-accurate on-screen movement using FR24 `heading` and a configurable north orientation.
 - Realistic transit timing from FR24 `ground_speed` (knots) and the configured real-world length of the display's short edge.
-- Configurable fallback duration, cooldown, airplane size and information labels.
+- Default speed of **200 km/h** when FR24 reports no valid ground speed; no fixed fallback animation duration.
+- Configurable cooldown, airplane size and information labels.
 - **Online requirement:** first use loads the Three.js runtime from esm.sh and the specific GLB file from raw.githubusercontent.com. These are external services; the card will not render a detailed model offline. The assets can be self-hosted via `model_source`, but Three.js still needs the CDN in this version.
 
 ## Installation
 
-### HACS custom repository
+### Home Assistant Marketplace (2026.11+)
 
-1. Install the [Flightradar24 custom integration](https://github.com/AlexandrErohin/home-assistant-flightradar24) via HACS; configure its monitored area around your home. Check the Home Assistant event listener under Developer Tools → Events for `flightradar24_entry`.
-2. In HACS → Custom repositories, add `https://github.com/andi-0309/ha-flight-flyover-card` as **Dashboard** repository and install it.
-3. Confirm that Home Assistant has registered `/hacsfiles/ha-flight-flyover-card/ha-flight-flyover-card.js` as a JavaScript module in Dashboard → Resources. Add it manually if HACS has not added it.
-4. Refresh the dashboard browser, ideally with a hard reload.
+1. Install the [Flightradar24 integration](https://github.com/AlexandrErohin/home-assistant-flightradar24) through **Settings → Marketplace** and configure the area around your home. You should receive `flightradar24_entry` events under Developer Tools → Events.
+2. Open **Settings → Marketplace → Add from link**. Paste `https://github.com/andi-0309/ha-flight-flyover-card`. Connect your GitHub account when prompted; this is required for custom repositories and update checks. If asked, choose **Dashboard** as the repository type.
+3. Open the new **Flight Flyover Card** entry and select **Install**.
+4. The Marketplace usually registers `/local/community/ha-flight-flyover-card/ha-flight-flyover-card.js` as a JavaScript **module** under dashboard resources. If resources are managed in YAML, add it manually instead.
+5. Reload the dashboard browser after installing or updating the card.
 5. Add **one** manual custom card to the dashboard:
 
 ```yaml
 type: custom:ha-flight-flyover-card
 screen_short_edge_meters: 1000
-screen_top_bearing: 0
+screen_top_bearing: 37.5
 direction: heading
-duration: 6000
+default_speed_kmh: 200
 cooldown: 30
 max_fps: 20
 size: 330
@@ -48,8 +50,8 @@ Copy `dist/ha-flight-flyover-card.js` to `/config/www/ha-flight-flyover-card.js`
 | Option | Default | Description |
 |---|---|---|
 | `screen_short_edge_meters` | `1000` | Real-world distance represented by the *shorter* dashboard viewport edge in metres (10–100000). |
-| `screen_top_bearing` | `0` | Compass bearing of screen top in degrees: 0 = north, 90 = east, 180 = south, 270 = west. |
-| `duration` | `6000` | **Fallback only:** flyover milliseconds when `ground_speed` is missing or zero (1500–30000). |
+| `screen_top_bearing` | `0` | **Any numeric degree value** measured clockwise from north toward the top of the screen. Examples: `0`, `37.5`, `145`, `270`, `-15`. Values wrap around at 360°. |
+| `default_speed_kmh` | `200` | Speed in km/h used if FR24 `ground_speed` is missing, zero or invalid (20–1200 km/h). |
 | `cooldown` | `30` | Seconds between flyovers (0–3600). |
 | `max_fps` | `20` | Rendering FPS cap (1–30). |
 | `size` | `330` | Plane canvas width in pixels (120–700). |
@@ -62,9 +64,9 @@ Copy `dist/ha-flight-flyover-card.js` to `/config/www/ha-flight-flyover-card.js`
 
 FR24 reports `ground_speed` in **knots** and `heading` as degrees clockwise from north. The card converts speed to metres per second (`knots × 1852 / 3600`). It projects the aircraft's heading onto the dashboard, taking `screen_top_bearing` into account. The entire viewport is interpreted as a rectangle of real-world dimensions: its **shorter edge** represents `screen_short_edge_meters`. Its longer dimension is scaled by the browser's aspect ratio.
 
-The aircraft travels along a line through the centre of that rectangle. The line intersects the actual screen borders; an extra margin is added at both ends so the aircraft enters and exits fully. The flyover duration is **distance divided by ground speed** (bounded to 1–120 seconds to avoid pathological cases). If the speed is unavailable or zero, the configured `duration` is used instead. The renderer runs at no more than `max_fps` during a flyover.
+The aircraft travels along a line through the centre of that rectangle. The line intersects the actual screen borders; an extra margin is added at both ends so the aircraft enters and exits fully. The flyover duration is **distance divided by ground speed** (bounded to 1–120 seconds to avoid pathological cases). When FR24 provides no valid speed, the card assumes **200 km/h** (`default_speed_kmh`) and still calculates the duration from the geometric distance. There is no fixed-time fallback. The renderer runs at no more than `max_fps` during a flyover.
 
-`screen_top_bearing` describes what real-world compass direction should appear at the **top** of the dashboard: north-up `0`, south-up `180`. The setting is purely a configurable display orientation; an upright TV does not reveal this value automatically. This is a **centred animation**, not an exact trace of the aircraft's measured latitude/longitude over the house. In windy conditions, its reported heading may also differ slightly from actual ground track.
+`screen_top_bearing` is a **free compass angle in degrees**, not a simple north/south toggle. For example, `37.5` means the top of the display corresponds to a bearing 37.5° clockwise from true north. This describes an abstract view orientation (how geographic directions map to the screen); a TV's physical orientation alone does not determine the setting. This is a **centred animation**, not an exact trace of the aircraft's measured latitude/longitude over the house. In windy conditions, its reported heading may also differ slightly from actual ground track.
 
 ## Testing without waiting for an aircraft
 
@@ -84,6 +86,15 @@ ground_speed: 400
 ```
 
 This should display a 3D A380 moving right across the whole screen, labelled `LH123` and `FRA → MUC`. At the default scale, the duration is calculated from `400` knots and the 1,000-metre short edge. Change `screen_top_bearing` to `180` to reverse the apparent direction of a northbound test flight. To test another flyover, change the `id` (or wait 10 minutes). Avoid using this test while production flight entries are running, because the card queues up to three events.
+
+## Automatic updates in the Marketplace
+
+The repository publishes **numbered stable GitHub releases**, including the installable JavaScript artifact, after successful checks on `main` (see `.github/workflows/validate.yml`). The Home Assistant Marketplace uses these releases to determine available updates and creates an **update entity** for the installed repository.
+
+- Custom repositories need a GitHub connection in **Settings → Marketplace**. Their update checks run periodically (currently approximately **every 48 hours**). The Marketplace can install updates independently of the card.
+- When a newer release is available, it appears under **Settings → Updates**. Installing it updates the JavaScript file and resource URL. **Reload the dashboard browser** to use the new code.
+- If you want unattended installation, use [the optional automation](examples/marketplace-auto-update.yaml) with the *actual* update entity ID of your installed Flight Flyover Card. The Marketplace can automatically install via `update.install` when enabled. **The automation does not become active merely by installing the card.**
+- The `hacs.json` file remains mandatory metadata for the Marketplace despite its historical name; it is not a requirement to install the former HACS integration.
 
 ## Architecture and compatibility
 
@@ -107,4 +118,4 @@ Card code is MIT licensed. 3D aircraft models are from [AMVLab aircraft-models](
 
 ## Development
 
-The shipping entrypoint is `dist/ha-flight-flyover-card.js` (plain JavaScript module). To run the lightweight parser tests locally with Node.js 20+, use `node --check dist/ha-flight-flyover-card.js` and `node --test tests/*.test.cjs`. Browser/HA integration testing is still required for a release.
+The shipping entrypoint is `dist/ha-flight-flyover-card.js` (plain JavaScript module). To run the lightweight parser tests locally with Node.js 20+, use `node --check dist/ha-flight-flyover-card.js` and `node --test tests/*.test.cjs`. GitHub Actions validates each commit before publishing the next stable release. A live browser/HA integration test is still recommended.
