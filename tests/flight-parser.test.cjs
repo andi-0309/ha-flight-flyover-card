@@ -93,9 +93,30 @@ test("double ground speed halves computed duration", () => {
   const fast=flyoverPath(1920,1080,330,90,0,"heading",1000,500,6000);
   assert.ok(Math.abs(slow.durationMs/fast.durationMs-2)<1e-10);
 });
-test("when ground speed is missing, card falls back to configured fixed duration", () => {
-  const p=flyoverPath(1920,1080,330,20,0,"heading",1000,null,7500);
-  assert.equal(p.durationMs,7500);
+test("missing speed falls back to 200 km/h instead of fixed duration", () => {
+  const path = flyoverPath(1920,1080,330,20,0,"heading",1000,null);
+  const speedMetersPerSecond = 200 / 3.6;
+  assert.ok(Math.abs(path.durationMs - 1000 * path.distanceMeters / speedMetersPerSecond) < 1e-8);
+});
+test("zero or invalid FR24 speed uses the 200 km/h default", () => {
+  const missing = flyoverPath(1920,1080,330,65,0,"heading",1000,null);
+  for (const speed of [0,-10,NaN]) {
+    const result = flyoverPath(1920,1080,330,65,0,"heading",1000,speed);
+    assert.equal(result.durationMs,missing.durationMs);
+  }
+});
+test("the fallback default speed can be changed independently", () => {
+  const slower=flyoverPath(1920,1080,330,90,0,"heading",1000,null,100);
+  const quicker=flyoverPath(1920,1080,330,90,0,"heading",1000,null,200);
+  assert.ok(Math.abs(slower.durationMs / quicker.durationMs - 2) < 1e-10);
+});
+test("free screen-top bearing in degrees accurately rotates flight course", () => {
+  const rotated=flyoverPath(1920,1080,330,127.5,37.5,"heading",1000,400);
+  assert.ok(Math.abs(rotated.dx-1)<1e-10);
+  assert.ok(Math.abs(rotated.dy)<1e-10);
+  const same=flyoverPath(1920,1080,330,127.5,397.5,"heading",1000,400);
+  assert.ok(Math.abs(rotated.dx-same.dx)<1e-10);
+  assert.ok(Math.abs(rotated.dy-same.dy)<1e-10);
 });
 test("left/right overrides ignore actual course and screen rotation", () => {
   const left=flyoverPath(1920,1080,330,45,180,"left",1000,300,6000);
