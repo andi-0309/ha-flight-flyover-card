@@ -53,15 +53,18 @@ const FR24_MODELS = Object.freeze({
 });
 const AMVLAB_MODELS = new Set(["A320","A350","A380","B737","B787"]);
 const SKY_ALIASES = Object.freeze({
-  A220:"A220", A330:"A333", A340:"A343",
-  B744:"B744", B747:"B744", B752:"B752", B777:"B77W",
+  A220:"A220", A330:"A333", A332:"A333", A340:"A343",
+  B744:"B744", B747:"B744", B748:"B744", B752:"B752",
+  B772:"B77W", B773:"B77W", B777:"B77W",
+  B763:"B77W", B764:"B77W",
   E190:"E190", E195:"E195", E145:"E145",
   C172:"C172", C182:"C182", C208:"C208", C310:"C310",
   PA28:"PA28", PA18:"PA18", DR40:"DR40", DA42:"DA42",
   BE20:"BE20", FK9:"FK9", GLIDER:"CENTRAIR101",
   CITATION:"C550", CL60:"CL60", LEGACY:"LEGACY",
-  ATR72:"AT72", DH8C:"DH8C", DH8D:"DH8D",
-  CRJ2:"CRJ2", CRJ7:"CRJ7", SF34:"SF34", B738:"B738"
+  ATR72:"AT72", ATR42:"AT72", DH8C:"DH8C", DH8D:"DH8D",
+  CRJ2:"CRJ2", CRJ7:"CRJ7", CRJ9:"CRJ7",
+  SF34:"SF34", B738:"B738", E170:"E190", BAE146:"E190"
 });
 function normalizeNose(angle) {
   // All third-party GLBs are rotated onto our +X-forward convention so that
