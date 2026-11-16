@@ -1,9 +1,12 @@
-name: Validation
+name: Validate and publish Marketplace release
 
 on:
   push:
     branches: [main]
   pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -19,3 +22,43 @@ jobs:
         run: node --check dist/ha-flight-flyover-card.js
       - name: Run unit tests
         run: node --test tests/*.test.cjs
+      - name: Validate Marketplace metadata and distribution
+        run: |
+          node -e 'const fs=require("fs");const h=JSON.parse(fs.readFileSync("hacs.json","utf8"));if(h.filename!=="ha-flight-flyover-card.js"||!fs.existsSync("dist/"+h.filename)){process.exit(1)}'
+
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: flight-flyover-marketplace-release
+      cancel-in-progress: false
+    steps:
+      - name: Checkout full history and tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Determine next stable patch version
+        id: version
+        shell: bash
+        run: |
+          git fetch --tags --force
+          latest="$(git tag --list 'v*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if [[ -z "$latest" ]]; then
+            next="v0.1.0"
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            next="v${major}.${minor}.$((patch + 1))"
+          fi
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+      - name: Publish stable Marketplace release with installable module
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$VERSION" dist/ha-flight-flyover-card.js \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --generate-notes
