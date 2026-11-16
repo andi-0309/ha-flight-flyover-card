@@ -12,8 +12,8 @@ Flight Flyover Card uses [Flightradar24](https://github.com/AlexandrErohin/home-
 
 - **Full-screen 3D flyovers** above all dashboard cards, without blocking interaction
 - **Real flight data:** position, heading, speed and flight number
-- **Cinematic animation:** zoom, changing camera angle and realistic lighting
-- **Aircraft-specific models:** A320, A350, A380, B737 and B787 families
+- **Cinematic animation:** zoom, changing camera angle, realistic lighting and a large, soft floating shadow
+- **Wide aircraft coverage:** Airbus A220–A380, Boeing 737/747/757/767/777/787, Embraer E-Jets, regional aircraft, Cessna, Piper and other light aircraft
 - **Flight details:** show departure and arrival airports as codes, names or both
 - **Visual configuration** in the Home Assistant dashboard editor
 
@@ -47,7 +47,7 @@ airport_format: both
 
 - Flyovers are **predictions** based on the aircraft's reported position, course and speed when the `flightradar24_entry` event occurs. Missing position or heading means no flyover.
 - If speed is unavailable, the card uses **200 km/h**. Unsupported aircraft types use an A320 model.
-- 3D models are downloaded when needed; the Three.js renderer is bundled with the card.
+- 3D models are downloaded when needed; the Three.js renderer is bundled with the card. Some subtypes use the nearest available model within their aircraft family.
 - **Updates are detected by Home Assistant Marketplace** through GitHub releases. No update automation is needed. Reload the dashboard after updating.
 
 ## Credits
