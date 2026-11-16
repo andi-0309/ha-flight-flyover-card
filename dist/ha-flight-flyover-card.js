@@ -4,7 +4,7 @@ const EVENT = "flightradar24_entry";
 const CDN = "https://esm.sh/three@0.170.0";
 const GLB_BASE = "https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/";
 const OPTIONS = Object.freeze({
-  duration: 6000, cooldown: 30, max_fps: 20, size: 330,
+  default_speed_kmh: 200, cooldown: 30, max_fps: 20, size: 330,
   show_flight_number: true, show_route: true, direction: "heading",
   screen_short_edge_meters: 1000, screen_top_bearing: 0,
   model_source: GLB_BASE
@@ -28,7 +28,7 @@ function numericOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
-function flyoverPath(viewportWidth, viewportHeight, shipSize, heading, screenTopBearing, direction, shortEdgeMeters, speedKnots, fallbackDuration) {
+function flyoverPath(viewportWidth, viewportHeight, shipSize, heading, screenTopBearing, direction, shortEdgeMeters, speedKnots, defaultSpeedKmh = 200) {
   const width = Math.max(1, viewportWidth);
   const height = Math.max(1, viewportHeight);
   // screen_top_bearing is the real-world direction in which the screen's TOP points.
@@ -47,11 +47,11 @@ function flyoverPath(viewportWidth, viewportHeight, shipSize, heading, screenTop
   const radius = edgeDistancePixels + offscreenPadding;
   const metersPerPixel = shortEdgeMeters / Math.min(width, height);
   const distanceMeters = 2 * radius * metersPerPixel;
-  const metersPerSecond = speedKnots && speedKnots > 0 ? speedKnots * KNOT_TO_METERS_PER_SECOND : null;
-  // duration remains the fallback for missing/invalid speed data.
-  const durationMs = metersPerSecond
-    ? Math.min(120000, Math.max(1000, 1000 * distanceMeters / metersPerSecond))
-    : fallbackDuration;
+  // Missing, zero and invalid FR24 speeds use the configured 200 km/h default.
+  const metersPerSecond = speedKnots && speedKnots > 0
+    ? speedKnots * KNOT_TO_METERS_PER_SECOND
+    : defaultSpeedKmh / 3.6;
+  const durationMs = Math.min(120000, Math.max(1000, 1000 * distanceMeters / metersPerSecond));
   return {
     dx, dy,
     startX: width / 2 - radius * dx,
@@ -106,12 +106,15 @@ class FlightFlyoverCard extends HTMLElement {
     if (!config || typeof config !== "object") throw Error("Configuration required");
     if (config.direction && !["heading","left","right"].includes(config.direction)) throw Error("direction must be heading, left or right");
     this._config={...OPTIONS,...config,
-      duration:range(config.duration ?? OPTIONS.duration,1500,30000,6000),
+      default_speed_kmh:range(config.default_speed_kmh ?? OPTIONS.default_speed_kmh,20,1200,200),
       cooldown:range(config.cooldown ?? OPTIONS.cooldown,0,3600,30),
       max_fps:range(config.max_fps ?? OPTIONS.max_fps,1,30,20),
       size:range(config.size ?? OPTIONS.size,120,700,330),
       screen_short_edge_meters:range(config.screen_short_edge_meters ?? OPTIONS.screen_short_edge_meters,10,100000,1000),
-      screen_top_bearing:((range(config.screen_top_bearing ?? OPTIONS.screen_top_bearing,-360,360,0)%360)+360)%360};
+      // Accept arbitrary clockwise degrees, including fractional and negative values.
+      screen_top_bearing:(((
+        numericOrNull(config.screen_top_bearing) ?? OPTIONS.screen_top_bearing
+      )%360)+360)%360};
     this._modelCache.clear();
     if(this.isConnected) this._renderRoot();
   }
@@ -281,7 +284,7 @@ class FlightFlyoverCard extends HTMLElement {
     const path=flyoverPath(
       window.innerWidth,window.innerHeight,size,flight.heading,
       this._config.screen_top_bearing,this._config.direction,
-      this._config.screen_short_edge_meters,flight.groundSpeed,this._config.duration
+      this._config.screen_short_edge_meters,flight.groundSpeed,this._config.default_speed_kmh
     );
     const duration=path.durationMs;
     const start=performance.now();
