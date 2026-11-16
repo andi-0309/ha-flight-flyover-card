@@ -761,6 +761,7 @@ if (!window.customCards.some((card) => card.type === TAG)) {
     name: "Flight Flyover",
     icon: "mdi:airplane",
     preview: false,
-    description: "Real 3D aircraft fly over the dashboard when their projected path crosses your home"
+    description: "3D aircraft flyovers with flight details and fading contrails.",
+    documentationURL: "https://github.com/andi-0309/ha-flight-flyover-card#readme"
   });
 }
