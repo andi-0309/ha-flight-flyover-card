@@ -50,10 +50,10 @@ const compute = (plane, options = settings) =>
 
 test("ICAO aircraft model families match the supported 3D models", () => {
   for (const [code, expected] of Object.entries({
-    A319: "A320", A20N: "A320", A321: "A320",
+    A319: "A319", A20N: "A320", A321: "A321",
     A359: "A350", A35K: "A350", A388: "A380",
-    B738: "B737", B38M: "B737", B739: "B737",
-    B789: "B787", B78X: "B787"
+    B738: "B738", B38M: "B738", B739: "B739",
+    B789: "B789", B78X: "B787"
   })) assert.equal(modelFor(code), expected);
   assert.equal(modelFor("E190"), "E190");
 });
@@ -271,7 +271,7 @@ test("Boeing 747, 777 and 767 variants select true matching aircraft meshes", ()
     B772:"B772", B77L:"B772", "777-200":"B772", B773:"B773",
     "777-300":"B773", B77W:"B777", "B777":"B777",
     B763:"B763", B764:"B764", B752:"B752",
-    "787-9":"B787", B789:"B787", B738:"B737", "737-800":"B737"
+    "787-9":"B789", B789:"B789", B738:"B738", "737-800":"B738"
   };
   for (const [icao, expected] of Object.entries(models))
     assert.equal(modelFor(icao),expected,icao);
@@ -280,22 +280,22 @@ test("Boeing 747, 777 and 767 variants select true matching aircraft meshes", ()
   const b772=modelCandidates("B772");
   assert.match(b772[0].url,/\/b772\.glb$/);
   const b777=modelCandidates("B777");
-  assert.ok(b777.some(item=>item.url.includes("ac_b77w")));
+  assert.ok(b777.some(item=>item.url.endsWith("/b773.glb")));
 });
 
 test("A330 family, regional Embraer E-Jets, ATR and A220 have distinct 3D models", () => {
   const models={
     A332:"A332", A333:"A330", A339:"A330", A340:"A340",
-    BCS3:"A220", A220:"A220", E170:"E170", E175:"E170",
+    BCS3:"A220", A220:"A220", E170:"E170", E175:"E175",
     E190:"E190", E195:"E195", E290:"E190", E295:"E195",
     ERJ145:"E145", CRJ900:"CRJ9", AT72:"ATR72", ATR42:"ATR42",
     DH8D:"DH8D", B461:"BAE146"
   };
   for(const [icao, expected] of Object.entries(models))
     assert.equal(modelFor(icao),expected,icao);
-  assert.ok(modelCandidates("A330").some(x=>x.url.includes("ac_a333")));
-  assert.ok(modelCandidates("E190").some(x=>x.url.includes("ac_e190")));
-  assert.ok(modelCandidates("E195").some(x=>x.url.includes("ac_e195")));
+  assert.ok(modelCandidates("A330").some(x=>x.url.endsWith("/a333.glb")));
+  assert.ok(modelCandidates("E190").some(x=>x.url.endsWith("/e190.glb")));
+  assert.ok(modelCandidates("E195").some(x=>x.url.endsWith("/e190.glb")));
   assert.ok(modelCandidates("E170").some(x=>x.url.endsWith("/e170.glb")));
 });
 
@@ -327,7 +327,7 @@ test("source-specific model axes normalize to +X forward", () => {
     assert.ok(Math.abs(xPrime-1)<1e-10,axis);
     assert.ok(Math.abs(zPrime)<1e-10,axis);
   }
-  assert.equal(modelCandidates("C172")[0].forward,"-Z");
+  assert.equal(modelCandidates("C172")[0].forward,"-X");
   assert.equal(modelCandidates("A320")[0].forward,"+X");
 });
 
@@ -356,4 +356,26 @@ test("the exact event code B748 displays a 747-8 model, not an Airbus approximat
   assert.equal(flight.model,"B748");
   assert.ok(modelCandidates(flight.model)[0].url.endsWith("/b748.glb"));
   assert.equal(flight.heading,111);
+});
+
+test("Every model uses a CORS-readable GitHub raw URL, not a release download", () => {
+  for(const type of ["A220","A330","A332","B748","B777","E170","E190","E195",
+                      "C172","C182","C208","PA18","PA28","DR40","SR22","PC12",
+                      "CITATION","GLIDER","CRJ9","HELI"]){
+    const candidates=modelCandidates(type);
+    assert.ok(candidates.length>0,type);
+    for(const asset of candidates){
+      assert.ok(asset.url.startsWith("https://raw.githubusercontent.com/"),type+" "+asset.url);
+      assert.ok(asset.url.endsWith(".glb"),type+" "+asset.url);
+      assert.ok(["+X","-X","-Z","+Z"].includes(asset.forward));
+    }
+  }
+});
+test("Popular small aircraft point at dedicated CORS-safe GLB geometry", () => {
+  assert.match(modelCandidates("C172")[0].url,/\/c172\.glb$/);
+  assert.match(modelCandidates("C182")[0].url,/\/c182\/glTF2\/C182\.glb$/);
+  assert.match(modelCandidates("C208")[0].url,/\/c208\/glTF2\/C208\.glb$/);
+  assert.match(modelCandidates("SR22")[0].url,/\/sr22\/output\/sr22\.glb$/);
+  assert.match(modelCandidates("PC12")[0].url,/\/pc12\/output\/pc12\.glb$/);
+  assert.match(modelCandidates("PA28")[0].url,/\/pa28\.glb$/);
 });
