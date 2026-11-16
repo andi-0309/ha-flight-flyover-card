@@ -1,4 +1,4 @@
-/* HA Flight Flyover Card - MVP. GPL? Code MIT, external models CC BY 4.0. */
+/* HA Flight Flyover Card - MIT licensed card code; third-party GLB models are CC BY 4.0. */
 const TAG = "ha-flight-flyover-card";
 const EVENT = "flightradar24_entry";
 const CDN = "https://esm.sh/three@0.170.0";
@@ -6,7 +6,7 @@ const GLB_BASE = "https://raw.githubusercontent.com/amvlab/aircraft-models/main/
 const OPTIONS = Object.freeze({
   duration: 6000, cooldown: 30, max_fps: 20, size: 330,
   show_flight_number: true, show_route: true, direction: "heading",
-  demo: false, model_source: GLB_BASE
+  model_source: GLB_BASE
 });
 const MODEL_NAMES = Object.freeze(["A320","A350","A380","B737","B787"]);
 function asText(v) { return typeof v === "string" || typeof v === "number" ? String(v).trim() : ""; }
