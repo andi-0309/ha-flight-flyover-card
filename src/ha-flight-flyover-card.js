@@ -81,24 +81,6 @@ function normalizeNose(angle) {
   // aircraftYawForScreen() keeps the nose pointed along the actual flight path.
   return ({"+X":0,"-Z":-Math.PI/2,"-X":Math.PI,"+Z":Math.PI/2})[angle] ?? 0;
 }
-function modelCandidates(type) {
-  const paths=[];
-  const add=(url,forward)=>{if(!paths.some(x=>x.url===url))paths.push({url,forward});};
-  if (AMVLAB_MODELS.has(type)) add(AMVLAB_BASE+type+"_nologo.glb","+X");
-  if (FR24_MODELS[type]) add(FR24_BASE+FR24_MODELS[type],"+X");
-  const sky=SKY_ALIASES[type]||type;
-  if (SKYTRAILS_MODELS[sky]) add(SKYTRAILS_BASE+SKYTRAILS_MODELS[sky],"-Z");
-  // Correctly licensed CC BY 4.0 alternative for the ubiquitous Cessna 172.
-  if(type==="C172")add(CC_BY_BASE+"c172.glb","-X");
-  if(type==="HELI")add(CC_BY_BASE+"bell206.glb","-X");
-  // Type-appropriate fallbacks on failed downloads or unreachable release URLs.
-  if(type.startsWith("E"))add(FR24_BASE+"e190.glb","+X");
-  if(["C172","C182","C208","PA18","DR40","DA42","BE20","FK9","GLIDER"].includes(type))
-    add(FR24_BASE+"pa28.glb","+X");
-  if(type.startsWith("B7") && !AMVLAB_MODELS.has(type))add(AMVLAB_BASE+"B787_nologo.glb","+X");
-  if(type!=="A320")add(AMVLAB_BASE+"A320_nologo.glb","+X");
-  return paths;
-}
 const KNOT_TO_METERS_PER_SECOND = 1852 / 3600;
 const METERS_PER_DEGREE = 111320;
 const MAX_ACTIVE = 3; // Protect low-power kiosk GPUs from too many WebGL contexts.
