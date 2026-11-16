@@ -91,8 +91,11 @@ test("every source uses a per-file heading calibration, including 747-8", () => 
   assert.equal(modelCandidates("B789")[0].forward,"-X");
   // Explicitly verify the fallback is calibrated to its OWN asset source.
   const fallback=modelCandidates("B748")[1];
-  assert.equal(fallback.forward,"-X");
-  assert.ok(fallback.url.endsWith("/airplane.glb"));
+  assert.equal(fallback.forward,"+Z");
+  assert.ok(fallback.url.endsWith("/b744/glTF2/B747.glb"));
+  const fallback747=modelCandidates("B744")[1];
+  assert.equal(fallback747.forward,"-X");
+  assert.ok(fallback747.url.endsWith("/airplane.glb"));
 });
 
 test("FR24 glTF1 assets are excluded; every candidate uses a GLB2 source", () => {
