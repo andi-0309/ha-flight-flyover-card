@@ -64,6 +64,33 @@ function aircraftYawForScreen(dx, dy, cameraTiltScale = CAMERA_TILT_SCALE) {
   const yaw = Math.atan2(-dy / cameraTiltScale, dx);
   return yaw;
 }
+// Smooth camera choreography stays independent of flight duration and direction.
+// Close overhead on approach -> brighter side profile on crossing -> recede.
+// The physical aircraft course remains unchanged; only the viewer moves.
+function smoothstep(start, end, value) {
+  const t = Math.max(0, Math.min(1, (value - start) / (end - start)));
+  return t * t * (3 - 2 * t);
+}
+function flyoverVisuals(progress) {
+  const t = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
+  const zoomIn = smoothstep(0, 0.30, t);
+  const zoomOut = smoothstep(0.72, 1, t);
+  const close = zoomIn * (1 - zoomOut);
+  // About 2x magnification at the closest point. Camera motion is much
+  // cheaper than scaling or replacing GLB geometry on the Raspberry Pi.
+  const distance = 17 - 8.5 * close;
+  // 76° above horizon at entry, easing down to 26° (mostly side-on).
+  const elevation = (76 - 50 * smoothstep(0.04, 0.62, t)) * Math.PI / 180;
+  return {
+    distance,
+    elevation,
+    // Correct the GLB's +X nose direction for the moving camera projection.
+    tiltScale: Math.sin(elevation),
+    opacity: Math.min(smoothstep(0, 0.07, t), 1 - smoothstep(0.93, 1, t)),
+    // Used only when the full 3D model cannot be rendered.
+    fallbackScale: 8.5 / distance
+  };
+}
 function modelFor(value) {
   const code = textValue(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
   if (/^(A318|A319|A320|A321|A20N|A21N|A19N)/.test(code)) return "A320";
@@ -373,12 +400,24 @@ class FlightFlyoverCard extends HTMLElement {
       renderer.setSize(this._config.size, Math.round(this._config.size / 1.5), false);
       renderer.setClearColor(0x000000, 0);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
+      // Filmic tone mapping preserves highlights without making pale fuselages
+      // look flat, even against a bright Home Assistant theme.
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.35;
       context.surface.replaceChildren(renderer.domElement);
       const scene = new THREE.Scene();
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x687c91, 2.5));
-      const sunlight = new THREE.DirectionalLight(0xffffff, 2.4);
-      sunlight.position.set(-3, 5, 7);
+      // Three inexpensive lights: warm sunlight, cool sky fill, and a clean
+      // highlight along the wings/tail. No heavyweight environment map.
+      scene.add(new THREE.HemisphereLight(0xf9fcff, 0x738eaa, 1.7));
+      const sunlight = new THREE.DirectionalLight(0xfff0da, 3.2);
+      sunlight.position.set(-5, 8, 6);
       scene.add(sunlight);
+      const fillLight = new THREE.DirectionalLight(0xc5dfff, 1.7);
+      fillLight.position.set(5, 3, 3);
+      scene.add(fillLight);
+      const rimLight = new THREE.DirectionalLight(0xffffff, 2.2);
+      rimLight.position.set(2, 6, -7);
+      scene.add(rimLight);
       scene.add(airplane);
       context.scene = scene;
       context.plane = airplane;
@@ -386,8 +425,6 @@ class FlightFlyoverCard extends HTMLElement {
       // Top-oriented oblique camera: world +X is screen-right, -Z is screen-up.
       // This keeps model nose direction consistent with screen motion.
       camera.up.set(0, 0, -1);
-      camera.position.set(0, CAMERA_HEIGHT, CAMERA_DEPTH);
-      camera.lookAt(0, 0, 0);
       const draw = (time) => {
         if (!this._active.has(entry.id) || !this.isConnected || document.hidden || Date.now() >= entry.endAt) {
           this._removeActive(entry.id);
@@ -400,10 +437,20 @@ class FlightFlyoverCard extends HTMLElement {
           Math.round(x - this._config.size / 2) + "px," +
           Math.round(y - this._config.size * .4) + "px,0)";
         if (time - context.lastFrame >= 1000 / this._config.max_fps) {
-          airplane.rotation.y = aircraftYawForScreen(entry.plan.dx, entry.plan.dy);
-          // Subtle banking around the aircraft's longitudinal (+X) axis.
+          const visual = flyoverVisuals(progress);
+          camera.position.set(
+            0,
+            visual.distance * Math.sin(visual.elevation),
+            visual.distance * Math.cos(visual.elevation)
+          );
+          camera.lookAt(0, 0, 0);
+          // Yaw must account for the changing camera pitch, or the airplane
+          // appears to drift sideways during the top-to-side transition.
+          airplane.rotation.y = aircraftYawForScreen(entry.plan.dx, entry.plan.dy, visual.tiltScale);
+          // Gentle bank around the aircraft's longitudinal (+X) axis.
           airplane.rotation.x = Math.sin(progress * Math.PI) * .04;
           airplane.rotation.z = 0;
+          context.ship.style.opacity = visual.opacity.toFixed(3);
           renderer.render(scene, camera);
           context.lastFrame = time;
         }
@@ -428,6 +475,9 @@ class FlightFlyoverCard extends HTMLElement {
           const y = entry.plan.startY + (entry.plan.endY - entry.plan.startY) * t;
           context.ship.style.transform = "translate3d(" + Math.round(x - this._config.size / 2) +
             "px," + Math.round(y - this._config.size * .4) + "px,0)";
+          const visual = flyoverVisuals(t);
+          context.ship.style.opacity = visual.opacity.toFixed(3);
+          context.surface.style.transform = "scale(" + visual.fallbackScale.toFixed(3) + ")";
           context.frame = requestAnimationFrame(draw);
         };
         context.frame = requestAnimationFrame(draw);
