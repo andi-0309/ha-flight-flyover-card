@@ -55,16 +55,31 @@ jobs:
       - name: Build distribution asset
         run: npm run build
       - name: Keep the distribution in main in sync
+        id: sync
         shell: bash
         run: |
+          # Older queued workflows must never overwrite a newer build.
+          git fetch origin main --quiet
+          if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "A newer main commit already exists; skip the stale release."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f dist/ha-flight-flyover-card.js
           if ! git diff --cached --quiet; then
             git commit -m "build: sync bundled marketplace asset [skip ci]"
-            git push origin HEAD:main
+            if ! git push origin HEAD:main; then
+              # Another main commit won the race and has its own build job.
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              echo "A newer main commit appeared during upload; skip stale release."
+              exit 0
+            fi
           fi
+          echo "publish=true" >> "$GITHUB_OUTPUT"
       - name: Determine next stable patch version
+        if: steps.sync.outputs.publish == 'true'
         id: version
         shell: bash
         run: |
@@ -78,6 +93,7 @@ jobs:
           fi
           echo "version=$next" >> "$GITHUB_OUTPUT"
       - name: Publish Marketplace release
+        if: steps.sync.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
