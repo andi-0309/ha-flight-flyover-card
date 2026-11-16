@@ -1,92 +1,104 @@
-# Installation in Home Assistant (Deutsch)
+# Flight Flyover Card – Installation in Home Assistant
+
+Die Flight Flyover Card zeigt realistische 3D-Flugzeuge als transparentes Overlay **über allen Dashboard-Karten**. Ein Flugzeug erscheint, sobald seine aus Flightradar24-Daten vorausberechnete Flugbahn den auf dem Dashboard dargestellten Bereich um dein Haus erreicht.
 
 ## Voraussetzungen
 
-- Home Assistant **2026.11 oder neuer** mit integriertem **Marketplace**
-- [Flightradar24-Integration](https://github.com/AlexandrErohin/home-assistant-flightradar24) bereits eingerichtet
-- Browser mit WebGL-Unterstützung und Internetzugriff auf `esm.sh` und `raw.githubusercontent.com`
+- Home Assistant 2026.11+ mit **Marketplace**
+- [Flightradar24-Integration](https://github.com/AlexandrErohin/home-assistant-flightradar24)
+- Eine korrekt konfigurierte **Home-Zone** mit geografischer Position
+- WebGL-fähiger Browser (für die 3D-Darstellung)
+- Internetzugang zu `raw.githubusercontent.com` für die Flugzeugmodelle. Die Three.js-Laufzeit ist bereits im installierten Kartenmodul enthalten; ein gesonderter Three.js-CDN-Zugriff ist nicht notwendig.
 
-## Schritt 1: Flightradar24 einrichten
+## 1. Flightradar24 installieren
 
-1. Unter **Einstellungen → Marketplace** die Integration **Flightradar24** (`AlexandrErohin/home-assistant-flightradar24`) installieren.
-2. Die Integration über **Einstellungen → Geräte & Dienste** einrichten und den überwachten Bereich um das Haus konfigurieren.
-3. Unter **Entwicklerwerkzeuge → Ereignisse** auf `flightradar24_entry` lauschen und bei einem neuen Flug prüfen, ob ein Ereignis eintrifft.
+1. **Einstellungen → Marketplace** öffnen und die Flightradar24-Integration installieren.
+2. Unter **Einstellungen → Geräte & Dienste** die Integration konfigurieren. Der Überwachungsradius sollte groß genug sein, damit Flugzeuge schon vor Erreichen des Hauses erkannt werden.
+3. Unter **Entwicklerwerkzeuge → Ereignisse** auf `flightradar24_entry` lauschen. Für die geografische Berechnung müssen `latitude`, `longitude` und `heading` vorhanden sein. Mit `ground_speed` (Knoten) wird die tatsächliche Flugdauer berechnet.
 
-## Schritt 2: Flight Flyover Card installieren
+## 2. Flight Flyover Card über den Marketplace installieren
 
-1. **Einstellungen → Marketplace → Über Link hinzufügen** aufrufen.
-2. Das GitHub-Repository `https://github.com/andi-0309/ha-flight-flyover-card` eintragen. Falls gefragt, GitHub mit dem Marketplace verbinden. Dieser Zugriff wird für Updates aus benutzerdefinierten Repositories benötigt.
-3. Falls der Marketplace den Typ nicht erkennt, **Dashboard** auswählen. Repository hinzufügen und danach **Installieren** wählen.
-4. Unter **Einstellungen → Dashboards → Ressourcen** prüfen, ob die JavaScript-Ressource `/local/community/ha-flight-flyover-card/ha-flight-flyover-card.js` vorhanden ist. Normalerweise legt der Marketplace sie automatisch an. Bei YAML-verwalteten Ressourcen den Pfad selbst als **JavaScript-Modul** eintragen.
-5. Browser/Dashboard nach Installation und Updates neu laden.
+1. Unter **Einstellungen → Marketplace → Über Link hinzufügen** das Repository `https://github.com/andi-0309/ha-flight-flyover-card` eintragen.
+2. Falls verlangt, GitHub mit dem Marketplace verbinden und den Repositorytyp **Dashboard** auswählen.
+3. **Flight Flyover Card** installieren.
+4. Prüfen, ob das JavaScript-Modul als Dashboard-Ressource hinzugefügt wurde (üblicherweise `/local/community/ha-flight-flyover-card/ha-flight-flyover-card.js`). Bei manuell verwalteten Ressourcen den vom Marketplace genannten Pfad als JavaScript-Modul registrieren.
+5. Browser beziehungsweise Kiosk-Dashboard neu laden.
 
-## Schritt 3: Karte im Dashboard konfigurieren
+## 3. Karte über die grafische Oberfläche konfigurieren
 
-Dashboard bearbeiten → **Karte hinzufügen → Manuell**. Folgende YAML-Konfiguration einfügen:
+1. Dashboard öffnen → **Bearbeiten → Karte hinzufügen**.
+2. Die Karte **Flight Flyover** auswählen.
+3. Die Einstellungen direkt über den **GUI-Editor** vornehmen und speichern.
+4. Die Karte benötigt keine sichtbare Höhe und kann irgendwo in der Ansicht liegen. Während eines Überflugs erscheint das Flugzeug über allen anderen Karten. Für weitere Ansichten die Karte dort ebenfalls hinzufügen.
+
+| Einstellung | Standard | Beschreibung |
+| --- | --- | --- |
+| Kürzere Bildschirmkante (Meter) | `1000` | Geografische Entfernung, die die kürzere Viewport-Kante abbildet |
+| Kompasswinkel oben (Grad) | `0` | **Beliebiger Winkel** relativ zu geografisch Nord, z. B. `37.5`, `145` oder `272.3` |
+| Ersatzgeschwindigkeit (km/h) | `200` | Falls FR24 keine gültige Geschwindigkeit liefert |
+| Flugrichtung | Automatisch | Kurs aus FR24; optional fest nach links/rechts |
+| Flugnummer anzeigen | An | Flugnummer/Callsign einblenden |
+| Startflughafen anzeigen | An | Startflughafen einblenden |
+| Zielflughafen anzeigen | An | Zielflughafen einblenden |
+| Flughafendarstellung | Kürzel | `Kürzel` (FRA), `Ausgeschrieben` (Frankfurt Airport) oder `Beides` |
+| Flugzeuggröße (Pixel) | `330` | Breite der Flugzeugdarstellung |
+| Maximale Bildrate (FPS) | `20` | Für schwächere Kiosk-Geräte gegebenenfalls 15 |
+
+### Manuelle YAML-Konfiguration (optional)
 
 ```yaml
 type: custom:ha-flight-flyover-card
 screen_short_edge_meters: 1000
 screen_top_bearing: 37.5
-direction: heading
 default_speed_kmh: 200
-cooldown: 30
+direction: heading
+show_flight_number: true
+show_origin_airport: true
+show_destination_airport: true
+airport_format: both
 max_fps: 20
 size: 330
-show_flight_number: true
-show_route: true
 ```
 
-**Neue Einstellungen für maßstabsgetreue Bewegungen:**
+**Nicht mehr vorhanden:** `duration`, `cooldown`, `model_source` und `show_route`. Start- und Zielflughafen werden unabhängig voneinander gesteuert. Die Flugdauer ergibt sich automatisch aus Strecke und Geschwindigkeit (oder 200 km/h Ersatzwert). Die Flugzeugmodelle werden von der Karte vorgegeben.
 
-- `screen_short_edge_meters: 1000`: Die **kürzere Bildschirmkante** entspricht 1.000 Metern. Die längere Kante wird automatisch anhand des Seitenverhältnisses berechnet.
-- `screen_top_bearing: 37.5`: **Frei wählbarer Kompasswinkel der Bildschirmoberkante**, im Uhrzeigersinn von geografisch Nord gemessen. Beispielsweise `0`, `37.5`, `145`, `180` oder `275.5` Grad. Es handelt sich **nicht** nur um eine Nord-/Süd-Umschaltung. Werte werden modulo 360° normalisiert.
-- `direction: heading`: Tatsächlicher Flugkurs aus FR24 bestimmt die Bewegung. Alternativ kann man mit `left` oder `right` eine feste horizontale Richtung erzwingen.
-- `default_speed_kmh: 200`: Wenn `ground_speed` fehlt, 0 ist oder nicht ausgewertet werden kann, verwendet die Karte **200 km/h** (einstellbar). Auch dann wird die Flugdauer aus Distanz und Geschwindigkeit berechnet.
-- `max_fps: 20`: GPU-Last auf einem Raspberry Pi begrenzen.
+### Flugrichtung und Modell
 
-Die Integration liefert `ground_speed` in **Knoten**. Die Karte rechnet intern `Knoten × 1852 / 3600` in Meter pro Sekunde um. Die dargestellte Linie läuft durch die Bildschirmmitte und verlängert sich an beiden Enden, damit das Flugzeug vollständig ins Bild hinein- und herausfliegt. Die Dauer ergibt sich **immer** aus Strecke ÷ Geschwindigkeit und wird zur Sicherheit auf 1 bis 120 Sekunden begrenzt. Ein zeitbasierter Fallback wird nicht verwendet.
+Die Karte verwendet den Kompasskurs aus Flightradar24 und dreht das 3D-Modell so, dass die **Flugzeugnase in die Bewegungsrichtung zeigt**. Dazu ist die originale Vorwärtsachse (+X) der AMVLab-Flugzeugmodelle berücksichtigt. Das funktioniert auch bei diagonalen Flugbahnen und frei gedrehtem Bildschirm-Kompasswinkel.
 
-Die Bewegung ist geografisch ausgerichtet, aber **keine exakte Abbildung der Flugzeugposition relativ zum Haus**: Der tatsächliche seitliche Abstand des Flugzeugs wird beim MVP nicht verwendet. Ein Kurs ist außerdem nicht immer identisch mit der tatsächlichen Richtung über Grund, beispielsweise bei Seitenwind.
+Der aktuelle Flugweg ist eine **Prognose aus der zuletzt gemeldeten Position, dem Kurs und der Geschwindigkeit**, kein fortlaufend aktualisierter Echtzeitpfad. Ohne GPS-Position oder Kurs wird kein Überflug ausgelöst. Die Berechnung orientiert sich an den Koordinaten von `zone.home` und an der konfigurierten Bildschirmgröße.
 
-Die Karte nimmt selbst keinen sichtbaren Platz ein. Das Flugzeug fliegt als transparentes Overlay über **alle Karten der aktuellen Dashboard-Ansicht**. Andere Ansichten benötigen jeweils eine eigene Karteninstanz. Wir empfehlen nur eine Instanz pro Ansicht.
+## 4. Funktion mit einem Testereignis prüfen
 
-## Schritt 4: Funktion testen
-
-In **Entwicklerwerkzeuge → Ereignisse → Ereignis auslösen**:
-
-Ereignistyp: `flightradar24_entry`
-
-Ereignisdaten:
+1. Unter **Entwicklerwerkzeuge → Zustände** die `latitude`- und `longitude`-Attribute von `zone.home` ablesen.
+2. Unter **Entwicklerwerkzeuge → Ereignisse** ein Ereignis vom Typ `flightradar24_entry` auslösen.
+3. Die folgenden Daten verwenden und **beide Koordinaten durch die Home-Zone-Koordinaten ersetzen**:
 
 ```yaml
-id: test-001
+id: testflug-001
 flight_number: LH123
 aircraft_code: A388
 airport_origin_code_iata: FRA
+airport_origin_name: Frankfurt Airport
 airport_destination_code_iata: MUC
+airport_destination_name: Munich Airport
+latitude: 48.1351 # Durch zone.home latitude ersetzen
+longitude: 11.5820 # Durch zone.home longitude ersetzen
 heading: 90
 ground_speed: 400
 ```
 
-Es sollte ein A380 mit `LH123` und `FRA → MUC` über den Bildschirm fliegen. Bei `screen_top_bearing: 37.5` verläuft die Bahn von links unten nach rechts oben; für eine rein horizontale Bewegung bei `heading: 90` setze den Winkel auf `0`. Mit `ground_speed: 400` Knoten ergibt sich die Flugdauer automatisch aus der Displaygröße. Für den nächsten Versuch die `id` verändern, da die Karte identische Flug-IDs für zehn Minuten unterdrückt.
+Wenn die Flugzeugposition genau der Home-Zone entspricht, beginnt die Animation bereits nahe der Bildschirmmitte. Für einen vollständigen Anflug aus westlicher Richtung bei Kurs 90° den Längengrad des Flugzeugs etwas **kleiner** als den der Home-Zone setzen. Für wiederholte Tests die `id` ändern.
 
-## Automatische Marketplace-Updates
+## Marketplace-Updates
 
-Für jede installierte Erweiterung legt der Marketplace eine **Update-Entität** an. Die Flight Flyover Card veröffentlicht nach erfolgreichen GitHub-Actions-Tests automatisch eine neue stabile Version und die installierbare JavaScript-Datei als GitHub-Release. Der Marketplace erkennt neue Versionen auch für benutzerdefinierte Repositories, sofern die GitHub-Verbindung eingerichtet ist. Bei diesen Repositories erfolgt die Aktualisierungsprüfung derzeit etwa alle **48 Stunden**.
+Neue stabile GitHub-Releases dieses Projekts werden vom **Home-Assistant-Marketplace** erkannt und als verfügbare Updates unter **Einstellungen → Updates** angezeigt. Das Projekt stellt die installierbare JavaScript-Datei als Release-Asset bereit. Eine gesonderte Update-Automation ist weder Teil dieser Karte noch notwendig.
 
-**Ohne zusätzliche Automation:** Unter **Einstellungen → Updates** erscheint eine neue Version; dort kannst du sie installieren.
-
-**Vollautomatisch installieren:** Unter **Einstellungen → Geräte & Dienste → Marketplace** die tatsächliche Update-Entität für **Flight Flyover Card** ermitteln. Dann die Beispielautomation [`examples/marketplace-auto-update.yaml`](examples/marketplace-auto-update.yaml) übernehmen und darin die `entity_id` ersetzen. Sie ruft `update.install` auf, sobald ein Update angeboten wird.
-
-Die Automation wird bei der Installation der Karte **nicht** automatisch aktiviert. Nach einem Kartenupdate muss der Dashboard-Browser neu geladen werden, damit der aktualisierte JavaScript-Code aktiv ist. Die alte Bezeichnung **HACS** wird dafür nicht mehr benötigt; die technische Manifestdatei heißt dennoch weiterhin `hacs.json`.
+Nach einem Update sollte der Dashboard-Browser beziehungsweise das Kiosk-Fenster neu geladen werden, damit die neue JavaScript-Version verwendet wird.
 
 ## Hinweise
 
-- Das MVP besitzt fünf Flugzeugmodellfamilien: A320, A350, A380, B737 und B787. Unbekannte Typen erscheinen ersatzweise als A320. Das tatsächliche Untermodell und die Airline-Lackierung sind noch nicht unterstützt.
-- Die Modelle werden bei Bedarf geladen; für die erste Animation ist Internetzugriff erforderlich. Es handelt sich derzeit **nicht** um eine reine Offline-Lösung.
-- Für einen Raspberry Pi 3B+ ist eine einfache Darstellung (z. B. `size: 250` und `max_fps: 15`) empfehlenswert, wenn die Animation ruckelt.
-- Die Karten unter dem Flugzeug bleiben bedienbar, da das Overlay keine Zeigerereignisse abfängt.
-- Wenn die Route fehlt, liefert die Datenquelle für diesen Flug möglicherweise keine Start- und Zielflughäfen.
-
-Weitere Optionen und Fehlerbehebung stehen in der [README](README.md).
+- Die Flugzeugmodelle für A320, A350, A380, B737 und B787 sind Typfamilien. Unbekannte Typen verwenden vorläufig ein A320-Modell.
+- Die Three.js-Laufzeit und der GLTFLoader sind zusammen in **eine einzige JavaScript-Datei** gebündelt, um doppelte Three.js-Imports zu vermeiden.
+- Für einen Raspberry Pi 3B+ kann `max_fps: 15` und `size: 250` sinnvoll sein.
+- Bei Fragen zur Lizenz der GLB-Modelle siehe [ATTRIBUTION.md](ATTRIBUTION.md).
