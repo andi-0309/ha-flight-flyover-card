@@ -2,23 +2,23 @@
 
 ## Voraussetzungen
 
-- Home Assistant mit HACS
+- Home Assistant **2026.11 oder neuer** mit integriertem **Marketplace**
 - [Flightradar24-Integration](https://github.com/AlexandrErohin/home-assistant-flightradar24) bereits eingerichtet
 - Browser mit WebGL-Unterstützung und Internetzugriff auf `esm.sh` und `raw.githubusercontent.com`
 
 ## Schritt 1: Flightradar24 einrichten
 
-1. In **HACS → Integrationen** das Repository `AlexandrErohin/home-assistant-flightradar24` suchen und installieren.
+1. Unter **Einstellungen → Marketplace** die Integration **Flightradar24** (`AlexandrErohin/home-assistant-flightradar24`) installieren.
 2. Die Integration über **Einstellungen → Geräte & Dienste** einrichten und den überwachten Bereich um das Haus konfigurieren.
 3. Unter **Entwicklerwerkzeuge → Ereignisse** auf `flightradar24_entry` lauschen und bei einem neuen Flug prüfen, ob ein Ereignis eintrifft.
 
 ## Schritt 2: Flight Flyover Card installieren
 
-1. In **HACS → Benutzerdefinierte Repositories** die URL `https://github.com/andi-0309/ha-flight-flyover-card` hinzufügen.
-2. Als Kategorie **Dashboard** wählen.
-3. Die Karte über HACS installieren.
-4. Unter **Einstellungen → Dashboards → Ressourcen** prüfen, ob die JavaScript-Ressource `/hacsfiles/ha-flight-flyover-card/ha-flight-flyover-card.js` vorhanden ist. Falls nicht, als **JavaScript-Modul** ergänzen.
-5. Browser/Dashboard neu laden.
+1. **Einstellungen → Marketplace → Über Link hinzufügen** aufrufen.
+2. Das GitHub-Repository `https://github.com/andi-0309/ha-flight-flyover-card` eintragen. Falls gefragt, GitHub mit dem Marketplace verbinden. Dieser Zugriff wird für Updates aus benutzerdefinierten Repositories benötigt.
+3. Falls der Marketplace den Typ nicht erkennt, **Dashboard** auswählen. Repository hinzufügen und danach **Installieren** wählen.
+4. Unter **Einstellungen → Dashboards → Ressourcen** prüfen, ob die JavaScript-Ressource `/local/community/ha-flight-flyover-card/ha-flight-flyover-card.js` vorhanden ist. Normalerweise legt der Marketplace sie automatisch an. Bei YAML-verwalteten Ressourcen den Pfad selbst als **JavaScript-Modul** eintragen.
+5. Browser/Dashboard nach Installation und Updates neu laden.
 
 ## Schritt 3: Karte im Dashboard konfigurieren
 
@@ -27,9 +27,9 @@ Dashboard bearbeiten → **Karte hinzufügen → Manuell**. Folgende YAML-Konfig
 ```yaml
 type: custom:ha-flight-flyover-card
 screen_short_edge_meters: 1000
-screen_top_bearing: 0
+screen_top_bearing: 37.5
 direction: heading
-duration: 6000
+default_speed_kmh: 200
 cooldown: 30
 max_fps: 20
 size: 330
@@ -40,12 +40,12 @@ show_route: true
 **Neue Einstellungen für maßstabsgetreue Bewegungen:**
 
 - `screen_short_edge_meters: 1000`: Die **kürzere Bildschirmkante** entspricht 1.000 Metern. Die längere Kante wird automatisch anhand des Seitenverhältnisses berechnet.
-- `screen_top_bearing: 0`: Norden liegt oben. `90` = Osten oben, `180` = Süden oben, `270` = Westen oben. Für einen südausgerichteten Bildschirm kannst du z. B. `180` einstellen.
+- `screen_top_bearing: 37.5`: **Frei wählbarer Kompasswinkel der Bildschirmoberkante**, im Uhrzeigersinn von geografisch Nord gemessen. Beispielsweise `0`, `37.5`, `145`, `180` oder `275.5` Grad. Es handelt sich **nicht** nur um eine Nord-/Süd-Umschaltung. Werte werden modulo 360° normalisiert.
 - `direction: heading`: Tatsächlicher Flugkurs aus FR24 bestimmt die Bewegung. Alternativ kann man mit `left` oder `right` eine feste horizontale Richtung erzwingen.
-- `duration: 6000`: Feste Animationsdauer als **Fallback**, wenn keine gültige Geschwindigkeit vorliegt. Mit `ground_speed` wird die Dauer automatisch berechnet.
+- `default_speed_kmh: 200`: Wenn `ground_speed` fehlt, 0 ist oder nicht ausgewertet werden kann, verwendet die Karte **200 km/h** (einstellbar). Auch dann wird die Flugdauer aus Distanz und Geschwindigkeit berechnet.
 - `max_fps: 20`: GPU-Last auf einem Raspberry Pi begrenzen.
 
-Die Integration liefert `ground_speed` in **Knoten**. Die Karte rechnet intern `Knoten × 1852 / 3600` in Meter pro Sekunde um. Die dargestellte Linie läuft durch die Bildschirmmitte und verlängert sich an beiden Enden, damit das Flugzeug vollständig ins Bild hinein- und herausfliegt. Die Dauer ergibt sich aus Strecke ÷ Geschwindigkeit und liegt aus Sicherheitsgründen zwischen 1 und 120 Sekunden.
+Die Integration liefert `ground_speed` in **Knoten**. Die Karte rechnet intern `Knoten × 1852 / 3600` in Meter pro Sekunde um. Die dargestellte Linie läuft durch die Bildschirmmitte und verlängert sich an beiden Enden, damit das Flugzeug vollständig ins Bild hinein- und herausfliegt. Die Dauer ergibt sich **immer** aus Strecke ÷ Geschwindigkeit und wird zur Sicherheit auf 1 bis 120 Sekunden begrenzt. Ein zeitbasierter Fallback wird nicht verwendet.
 
 Die Bewegung ist geografisch ausgerichtet, aber **keine exakte Abbildung der Flugzeugposition relativ zum Haus**: Der tatsächliche seitliche Abstand des Flugzeugs wird beim MVP nicht verwendet. Ein Kurs ist außerdem nicht immer identisch mit der tatsächlichen Richtung über Grund, beispielsweise bei Seitenwind.
 
@@ -69,7 +69,17 @@ heading: 90
 ground_speed: 400
 ```
 
-Es sollte ein A380 mit `LH123` und `FRA → MUC` über den Bildschirm fliegen. Mit `ground_speed: 400` Knoten ergibt sich die Flugdauer automatisch aus der Displaygröße. Für den nächsten Versuch die `id` verändern, da die Karte identische Flug-IDs für zehn Minuten unterdrückt.
+Es sollte ein A380 mit `LH123` und `FRA → MUC` über den Bildschirm fliegen. Bei `screen_top_bearing: 37.5` verläuft die Bahn von links unten nach rechts oben; für eine rein horizontale Bewegung bei `heading: 90` setze den Winkel auf `0`. Mit `ground_speed: 400` Knoten ergibt sich die Flugdauer automatisch aus der Displaygröße. Für den nächsten Versuch die `id` verändern, da die Karte identische Flug-IDs für zehn Minuten unterdrückt.
+
+## Automatische Marketplace-Updates
+
+Für jede installierte Erweiterung legt der Marketplace eine **Update-Entität** an. Die Flight Flyover Card veröffentlicht nach erfolgreichen GitHub-Actions-Tests automatisch eine neue stabile Version und die installierbare JavaScript-Datei als GitHub-Release. Der Marketplace erkennt neue Versionen auch für benutzerdefinierte Repositories, sofern die GitHub-Verbindung eingerichtet ist. Bei diesen Repositories erfolgt die Aktualisierungsprüfung derzeit etwa alle **48 Stunden**.
+
+**Ohne zusätzliche Automation:** Unter **Einstellungen → Updates** erscheint eine neue Version; dort kannst du sie installieren.
+
+**Vollautomatisch installieren:** Unter **Einstellungen → Geräte & Dienste → Marketplace** die tatsächliche Update-Entität für **Flight Flyover Card** ermitteln. Dann die Beispielautomation [`examples/marketplace-auto-update.yaml`](examples/marketplace-auto-update.yaml) übernehmen und darin die `entity_id` ersetzen. Sie ruft `update.install` auf, sobald ein Update angeboten wird.
+
+Die Automation wird bei der Installation der Karte **nicht** automatisch aktiviert. Nach einem Kartenupdate muss der Dashboard-Browser neu geladen werden, damit der aktualisierte JavaScript-Code aktiv ist. Die alte Bezeichnung **HACS** wird dafür nicht mehr benötigt; die technische Manifestdatei heißt dennoch weiterhin `hacs.json`.
 
 ## Hinweise
 
