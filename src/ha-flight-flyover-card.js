@@ -4,68 +4,78 @@ const EDITOR_TAG = "ha-flight-flyover-card-editor";
 const EVENT = "flightradar24_entry";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-// Lightweight FlightGear-derived GPL-2.0 assets from a pinned Skytrails release.
-// Third-party models are loaded on demand and remain under their source licenses.
-const SKYTRAILS_BASE = "https://github.com/stagworksde/skytrails-aircraft-models/releases/download/v0.1.0/";
-const FR24_BASE = "https://raw.githubusercontent.com/Flightradar24/fr24-3d-models/master/models/";
-const AMVLAB_BASE = "https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/";
-const CC_BY_BASE = "https://raw.githubusercontent.com/WorldPixelMap/android-gods-eye-view/main/public/models/";
-const SKYTRAILS_MODELS = Object.freeze({
-  "A220": "ac_a220-22f0e703.glb",
-  "A333": "ac_a333-d59fae4d.glb",
-  "A343": "ac_a343-bb1d7bce.glb",
-  "B738": "ac_b738-063d2826.glb",
-  "B744": "ac_b744-4c4cdb88.glb",
-  "B752": "ac_b752-629a0073.glb",
-  "B77W": "ac_b77w-4e801325.glb",
-  "E190": "ac_e190-49a4dc4e.glb",
-  "E195": "ac_e195-83ed49c6.glb",
-  "E145": "ac_e145-922b26a0.glb",
-  "C172": "ac_c172-91309060.glb",
-  "C182": "ac_c182-63ade89e.glb",
-  "C208": "ac_c208-e2deca58.glb",
-  "C310": "ac_c310-34baaf35.glb",
-  "PA28": "ac_pa28-e19c0d07.glb",
-  "PA18": "ac_pa18-8a11c283.glb",
-  "DR40": "ac_dr40-a66cc59c.glb",
-  "DA42": "ac_da42-5a7d0322.glb",
-  "BE20": "ac_be20-fddbf056.glb",
-  "FK9": "ac_fk9-a16762bf.glb",
-  "CENTRAIR101": "ac_centrair101-1ea60baf.glb",
-  "C550": "ac_c550-7b883b05.glb",
-  "CL60": "ac_cl60-e5f72c0f.glb",
-  "LEGACY": "ac_legacy-87aa025e.glb",
-  "AT72": "ac_at72-d844cba3.glb",
-  "DH8C": "ac_dh8c-95e6aeb4.glb",
-  "DH8D": "ac_dh8d-226868a6.glb",
-  "CRJ2": "ac_crj2-a760fdf0.glb",
-  "CRJ7": "ac_crj7-6f1b898b.glb",
-  "SF34": "ac_sf34-38730202.glb"
+// Raw GitHub model paths are CORS-enabled in browsers; release download URLs
+// are not reliably CORS-enabled and must not be used by GLTFLoader.
+const FR24_BASE="https://raw.githubusercontent.com/Flightradar24/fr24-3d-models/master/models/";
+const FLIGHTAIRMAP_BASE="https://raw.githubusercontent.com/Ysurac/FlightAirMap-3dmodels/master/";
+const AMVLAB_BASE="https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/";
+const CC_BY_BASE="https://raw.githubusercontent.com/WorldPixelMap/android-gods-eye-view/main/public/models/";
+const FR24_MODELS=Object.freeze({
+  A318:"a318.glb",A319:"a319.glb",A321:"a321.glb",
+  A330:"a333.glb",A340:"a346.glb",
+  B736:"b736.glb",B737:"b737.glb",B738:"b738.glb",B739:"b739.glb",
+  B744:"b744.glb",B748:"b748.glb",
+  B752:"b752.glb",B753:"b753.glb",
+  B762:"b762.glb",B763:"b763.glb",B764:"b764.glb",
+  B772:"b772.glb",B773:"b773.glb",B777:"b773.glb",
+  B788:"b788.glb",B789:"b789.glb",
+  E170:"e170.glb",E190:"e190.glb",E195:"e190.glb",
+  ATR42:"atr42.glb",CRJ7:"crj700.glb",CRJ9:"crj900.glb",
+  DH8D:"q400.glb",BAE146:"bae146.glb",
+  CITATION:"citation.glb",GLIDER:"ask21.glb",HELI:"heli.glb",
+  PA28:"pa28.glb"
 });
-// FR24 GPL-2.0 assets include several valuable subtypes absent from Skytrails.
-const FR24_MODELS = Object.freeze({
-  B748: "b748.glb", B772: "b772.glb", B773: "b773.glb",
-  B763: "b763.glb", B764: "b764.glb", A332: "a332.glb",
-  E170: "e170.glb", CRJ9: "crj900.glb",
-  ATR42: "atr42.glb", BAE146: "bae146.glb",
-  HELI: "heli.glb", CITATION: "citation.glb",
-  ASK21: "ask21.glb"
+const FLIGHTAIRMAP_MODELS=Object.freeze({
+  A220:"bcs1/glTF2/BCS3.glb",A332:"a332/glTF2/A332.glb",
+  A330:"a333/glTF2/A333.glb",
+  B744:"b744/glTF2/B747.glb",B748:"b748/glTF2/B748.glb",
+  B752:"b752/glTF2/B752.glb",B763:"b767/glTF2/B763.glb",
+  E170:"e190/glTF2/E170.glb",E175:"e190/glTF2/E75L.glb",
+  E190:"e190/glTF2/E190.glb",E195:"e190/glTF2/E190.glb",
+  E145:"e145/glTF2/E145.glb",
+  C182:"c182/glTF2/C182.glb",C208:"c208/glTF2/C208.glb",
+  C310:"c421/glTF2/C421.glb",PA28:"pa28/glTF2/PA28.glb",
+  PA18:"pa18/output/pa18.glb",PA22:"pa22/output/pa22.glb",
+  PA32:"pa32/output/pa32.glb",DR40:"dr40/output/dr40.glb",
+  SR22:"sr22/output/sr22.glb",PC12:"pc12/output/pc12.glb",
+  BE20:"c421/glTF2/C421.glb",DA42:"c421/glTF2/C421.glb",
+  FK9:"ulac/output/ulac.glb",CITATION:"c550/glTF2/C550.glb",
+  CL60:"c550/glTF2/C550.glb",LEGACY:"c550/glTF2/C550.glb",
+  ATR72:"atr72/glTF2/AT75.glb",ATR42:"atr42/glTF2/AT45.glb",
+  DH8C:"dhc4/output/dhc4.glb",DH8D:"dhc4/glTF2/DHC4.glb",
+  CRJ2:"crj2/glTF2/CRJ2.glb",CRJ7:"crj9/glTF2/CRJ7.glb",
+  CRJ9:"crj9/glTF2/CRJ9.glb",
+  B707:"b707/output/707.glb",MD11:"md11/output/md11.glb",
+  GLIDER:"ask21/glTF2/AS21.glb",HELI:"ec35/glTF2/EC35.glb",
+  B407:"b407/glTF2/B407.glb"
 });
-const AMVLAB_MODELS = new Set(["A320","A350","A380","B737","B787"]);
-const SKY_ALIASES = Object.freeze({
-  A220:"A220", A330:"A333", A332:"A333", A340:"A343",
-  B744:"B744", B747:"B744", B748:"B744", B752:"B752",
-  B772:"B77W", B773:"B77W", B777:"B77W",
-  B763:"B77W", B764:"B77W",
-  E190:"E190", E195:"E195", E145:"E145",
-  C172:"C172", C182:"C182", C208:"C208", C310:"C310",
-  PA28:"PA28", PA18:"PA18", DR40:"DR40", DA42:"DA42",
-  BE20:"BE20", FK9:"FK9", GLIDER:"CENTRAIR101",
-  CITATION:"C550", CL60:"CL60", LEGACY:"LEGACY",
-  ATR72:"AT72", ATR42:"AT72", DH8C:"DH8C", DH8D:"DH8D",
-  CRJ2:"CRJ2", CRJ7:"CRJ7", CRJ9:"CRJ7",
-  SF34:"SF34", B738:"B738", E170:"E190", BAE146:"E190"
-});
+const AMVLAB_MODELS=new Set(["A320","A350","A380","B787"]);
+function modelCandidates(type) {
+  const paths=[];
+  const add=(url,forward)=>{if(!paths.some(x=>x.url===url))paths.push({url,forward});};
+  if(AMVLAB_MODELS.has(type))add(AMVLAB_BASE+type+"_nologo.glb","+X");
+  if(type==="C172")add(CC_BY_BASE+"c172.glb","-X");
+  if(FR24_MODELS[type])add(FR24_BASE+FR24_MODELS[type],"+X");
+  if(FLIGHTAIRMAP_MODELS[type])add(FLIGHTAIRMAP_BASE+FLIGHTAIRMAP_MODELS[type],"+X");
+  if(type==="B407")add(CC_BY_BASE+"bell206.glb","-X");
+  // Fall back within the same family if a specific mesh is temporarily down.
+  const family={
+    A332:"A330",B748:"B744",B772:"B773",B777:"B773",
+    B762:"B763",B764:"B763",B753:"B752",E175:"E170",
+    E195:"E190",CRJ9:"CRJ7",CRJ2:"CRJ7",ATR42:"ATR72",
+    C182:"C172",C208:"C172",PA18:"PA28",DR40:"PA28",
+    DA42:"C310",BE20:"C310",FK9:"C172",PA32:"PA28",
+    SR22:"PA28",PC12:"PA28",LEGACY:"CITATION",CL60:"CITATION",
+    B407:"HELI"
+  }[type];
+  if(family){
+    if(FR24_MODELS[family])add(FR24_BASE+FR24_MODELS[family],"+X");
+    if(FLIGHTAIRMAP_MODELS[family])add(FLIGHTAIRMAP_BASE+FLIGHTAIRMAP_MODELS[family],"+X");
+    if(family==="C172")add(CC_BY_BASE+"c172.glb","-X");
+  }
+  if(type!=="A320")add(AMVLAB_BASE+"A320_nologo.glb","+X");
+  return paths;
+}
 function normalizeNose(angle) {
   // All third-party GLBs are rotated onto our +X-forward convention so that
   // aircraftYawForScreen() keeps the nose pointed along the actual flight path.
@@ -192,7 +202,10 @@ function modelFor(value) {
   const c=textValue(value).toUpperCase().replace(/[^A-Z0-9]/g,"");
   // Airbus: nearest matching real airframe when the exact variant is absent.
   if(/^(A220|A221|A223|BCS1|BCS3|CS100|CS300)/.test(c))return "A220";
-  if(/^(A318|A319|A320|A321|A19N|A20N|A21N|A32N)/.test(c))return "A320";
+  if(/^A318/.test(c))return "A318";
+  if(/^A319/.test(c))return "A319";
+  if(/^(A321|A21N)/.test(c))return "A321";
+  if(/^(A320|A20N|A19N|A32N)/.test(c))return "A320";
   if(/^(A332|A330200|330200)/.test(c))return "A332";
   if(/^(A330|A333|A338|A339|330300|330900)/.test(c))return "A330";
   if(/^(A340|A342|A343|A345|A346)/.test(c))return "A340";
@@ -204,15 +217,23 @@ function modelFor(value) {
   if(/^(B772|B77L|777200)/.test(c))return "B772";
   if(/^(B773|777300)/.test(c))return "B773";
   if(/^(B777|B77W|B77F|B778|B779|7778|7779)/.test(c))return "B777";
-  if(/^(B788|B789|B78X|B787|7878|7879|78710)/.test(c))return "B787";
+  if(/^(B707|707320)/.test(c))return "B707";
+  if(/^(MD11|MD1F)/.test(c))return "MD11";
+  if(/^(B788|7878)/.test(c))return "B788";
+  if(/^(B789|7879)/.test(c))return "B789";
+  if(/^(B78X|B787|78710)/.test(c))return "B787";
   if(/^(B752|B757|757200)/.test(c))return "B752";
   if(/^(B753|757300)/.test(c))return "B752";
   if(/^(B763|B767|767300)/.test(c))return "B763";
   if(/^(B764|767400)/.test(c))return "B764";
   if(/^(B762|767200)/.test(c))return "B763";
-  if(/^(B736|B737|B738|B739|B38M|B39M|B3XM|B3M8|B3M9|737)/.test(c))return "B737";
+  if(/^B736/.test(c))return "B736";
+  if(/^(B738|B38M|B3M8|737800|7378)/.test(c))return "B738";
+  if(/^(B739|B39M|B3M9|737900|7379)/.test(c))return "B739";
+  if(/^(B737|B3XM|737)/.test(c))return "B737";
   // Embraer: E-Jet/E2 and the smaller ERJ family.
-  if(/^(E170|E175|E75L|E75S|E17)/.test(c))return "E170";
+  if(/^(E175|E75L|E75S)/.test(c))return "E175";
+  if(/^(E170|E17)/.test(c))return "E170";
   if(/^(E195|E295|E95|EMB195)/.test(c))return "E195";
   if(/^(E190|E290|E190E2|E90)/.test(c))return "E190";
   if(/^(E135|E140|E145|ERJ|ER4|EMB145)/.test(c))return "E145";
@@ -230,7 +251,11 @@ function modelFor(value) {
   if(/^(C150|C152|C172|C17|CESSNA172)/.test(c))return "C172";
   if(/^(C182|C180|C185)/.test(c))return "C182";
   if(/^(C208|C208B|C206|C210)/.test(c))return "C208";
-  if(/^(PA28|P28A|P28R|PA32|PA46|SR20|SR22|DA40|DV20|P2002|P2008|BE36|TBM9|PC12)/.test(c))return "PA28";
+  if(/^SR22/.test(c))return "SR22";
+  if(/^PC12/.test(c))return "PC12";
+  if(/^PA32/.test(c))return "PA32";
+  if(/^(PA28|P28A|P28R|PA46|SR20|DA40|DV20|P2002|P2008|BE36|TBM9)/.test(c))return "PA28";
+  if(/^PA22/.test(c))return "PA22";
   if(/^(PA18|PA12|PA11|J3|PIPERCUB)/.test(c))return "PA18";
   if(/^(DR40|DR400|DR300)/.test(c))return "DR40";
   if(/^(DA42|DA62|PA34|P34|BE76)/.test(c))return "DA42";
@@ -241,7 +266,8 @@ function modelFor(value) {
   if(/^(C510|C525|C550|C560|C56X|C680|E50P|E55P|CIT|PC24|LJ45|LJ35)/.test(c))return "CITATION";
   if(/^(CL60|CL30|G280|F900|FA7X)/.test(c))return "CL60";
   if(/^(GLEX|GLF4|GLF5|GLF6|G650|G700|LEGACY)/.test(c))return "LEGACY";
-  if(/^(EC35|H135|EC45|H145|R22|R44|R66|B06|B407|HELI|AS35)/.test(c))return "HELI";
+  if(/^B407/.test(c))return "B407";
+  if(/^(EC35|H135|EC45|H145|R22|R44|R66|B06|HELI|AS35)/.test(c))return "HELI";
   return "A320";
 }
 function describe(raw) {
