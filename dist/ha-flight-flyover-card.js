@@ -6,9 +6,9 @@ const GLB_BASE = "https://raw.githubusercontent.com/amvlab/aircraft-models/main/
 const OPTIONS = Object.freeze({
   duration: 6000, cooldown: 30, max_fps: 20, size: 330,
   show_flight_number: true, show_route: true, direction: "heading",
+  screen_short_edge_meters: 1000, screen_top_bearing: 0,
   model_source: GLB_BASE
 });
-const MODEL_NAMES = Object.freeze(["A320","A350","A380","B737","B787"]);
 function asText(v) { return typeof v === "string" || typeof v === "number" ? String(v).trim() : ""; }
 function pick(data, ...keys) { for (const key of keys) { if (asText(data[key])) return asText(data[key]); } return ""; }
 function modelFor(code) {
@@ -20,18 +20,61 @@ function modelFor(code) {
   if (/^(B78|B787)/.test(c)) return "B787";
   return "A320";
 }
+// FR24's ground_speed is knots; heading is degrees clockwise from true north.
+// These helpers are pure, enabling testing without a browser or WebGL.
+const KNOT_TO_METERS_PER_SECOND = 1852 / 3600;
+function numericOrNull(value) {
+  if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function flyoverPath(viewportWidth, viewportHeight, shipSize, heading, screenTopBearing, direction, shortEdgeMeters, speedKnots, fallbackDuration) {
+  const width = Math.max(1, viewportWidth);
+  const height = Math.max(1, viewportHeight);
+  // screen_top_bearing is the real-world direction in which the screen's TOP points.
+  let angle = direction === "right" ? 90 : direction === "left" ? 270
+    : ((heading ?? 90) - screenTopBearing + 360) % 360;
+  const radians = angle * Math.PI / 180;
+  const dx = Math.sin(radians);
+  const dy = -Math.cos(radians);
+  // Move along a chord through the middle; intersect it with the rectangular display.
+  const edgeDistancePixels = Math.min(
+    Math.abs(dx) < 1e-10 ? Infinity : width / (2 * Math.abs(dx)),
+    Math.abs(dy) < 1e-10 ? Infinity : height / (2 * Math.abs(dy))
+  );
+  // Begin and end completely offscreen, including the aircraft and its label.
+  const offscreenPadding = Math.max(280, shipSize * .85 + 65);
+  const radius = edgeDistancePixels + offscreenPadding;
+  const metersPerPixel = shortEdgeMeters / Math.min(width, height);
+  const distanceMeters = 2 * radius * metersPerPixel;
+  const metersPerSecond = speedKnots && speedKnots > 0 ? speedKnots * KNOT_TO_METERS_PER_SECOND : null;
+  // duration remains the fallback for missing/invalid speed data.
+  const durationMs = metersPerSecond
+    ? Math.min(120000, Math.max(1000, 1000 * distanceMeters / metersPerSecond))
+    : fallbackDuration;
+  return {
+    dx, dy,
+    startX: width / 2 - radius * dx,
+    startY: height / 2 - radius * dy,
+    endX: width / 2 + radius * dx,
+    endY: height / 2 + radius * dy,
+    distanceMeters, durationMs
+  };
+}
 function describe(raw) {
   const data = raw && typeof raw === "object" ? (raw.data && typeof raw.data === "object" ? raw.data : raw) : {};
   const origin=pick(data,"airport_origin_code_iata","airport_origin_code_icao","airport_origin_city","airport_origin_name","origin","from_iata");
   const destination=pick(data,"airport_destination_code_iata","airport_destination_code_icao","airport_destination_city","airport_destination_name","destination","to_iata");
-  const heading = Number(data.heading ?? data.track ?? data.course);
+  const heading = numericOrNull(data.heading ?? data.track ?? data.course);
+  const groundSpeed = numericOrNull(data.ground_speed);
   return {
     id: pick(data,"id","flight_number","callsign","aircraft_registration"),
     number: pick(data,"flight_number","callsign","number","aircraft_registration") || "Unbekannter Flug",
     route: origin && destination ? origin + " → " + destination : (origin ? origin + " → ?" : destination ? "? → " + destination : ""),
     model: modelFor(pick(data,"aircraft_code","aircraft_type","type","model")),
     type: pick(data,"aircraft_code","aircraft_model"),
-    heading: Number.isFinite(heading) ? ((heading % 360) + 360) % 360 : null
+    heading: heading === null ? null : ((heading % 360) + 360) % 360,
+    groundSpeed: groundSpeed !== null && groundSpeed > 0 ? groundSpeed : null
   };
 }
 function range(v,min,max,fallback){const n=Number(v);return Number.isFinite(n)?Math.max(min,Math.min(max,n)):fallback;}
@@ -66,7 +109,9 @@ class FlightFlyoverCard extends HTMLElement {
       duration:range(config.duration ?? OPTIONS.duration,1500,30000,6000),
       cooldown:range(config.cooldown ?? OPTIONS.cooldown,0,3600,30),
       max_fps:range(config.max_fps ?? OPTIONS.max_fps,1,30,20),
-      size:range(config.size ?? OPTIONS.size,120,700,330)};
+      size:range(config.size ?? OPTIONS.size,120,700,330),
+      screen_short_edge_meters:range(config.screen_short_edge_meters ?? OPTIONS.screen_short_edge_meters,10,100000,1000),
+      screen_top_bearing:((range(config.screen_top_bearing ?? OPTIONS.screen_top_bearing,-360,360,0)%360)+360)%360};
     this._modelCache.clear();
     if(this.isConnected) this._renderRoot();
   }
@@ -232,20 +277,24 @@ class FlightFlyoverCard extends HTMLElement {
     }
     if(!this.isConnected || run!==this._generation)return;
     this._scene.add(this._aircraft);
-    const right=this._config.direction==="right" || (this._config.direction==="heading" && (flight.heading===null || flight.heading<180));
-    const duration=this._config.duration;
+    const path=flyoverPath(
+      window.innerWidth,window.innerHeight,size,flight.heading,
+      this._config.screen_top_bearing,this._config.direction,
+      this._config.screen_short_edge_meters,flight.groundSpeed,this._config.duration
+    );
+    const duration=path.durationMs;
     const start=performance.now();
     this._lastDraw=0;
     await new Promise(resolve=>{
       const draw=(time)=>{
         if(!this.isConnected || run!==this._generation || document.hidden){resolve();return;}
         const t=Math.min(1,(time-start)/duration);
-        const width=window.innerWidth, height=window.innerHeight;
-        const x=(right?-size:width+size)+(right?1:-1)*(width+size*2)*t;
-        const y=height*(.25+.15*Math.sin(t*Math.PI*1.2));
+        const x=path.startX+(path.endX-path.startX)*t;
+        const y=path.startY+(path.endY-path.startY)*t;
         ship.style.transform="translate3d("+Math.round(x-size/2)+"px,"+Math.round(y-size*.45)+"px,0)";
         if(time-this._lastDraw>=1000/this._config.max_fps){
-          this._aircraft.rotation.y=(right?-.4:.4)+Math.sin(t*Math.PI)*.15;
+          // Approximate aircraft yaw from its apparent direction, with gentle banking.
+          this._aircraft.rotation.y=Math.atan2(path.dx,-path.dy)+Math.sin(t*Math.PI)*.08;
           this._aircraft.rotation.z=Math.sin(t*Math.PI)*.10;
           this._renderer.render(this._scene,this._camera);
           this._lastDraw=time;
