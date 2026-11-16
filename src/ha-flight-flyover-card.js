@@ -645,32 +645,18 @@ class FlightFlyoverCard extends HTMLElement {
 
 const EDITOR_TEXT = {
   de: {
-    intro: "Die Karte überwacht den vorausberechneten Flugweg über der Home-Zone.",
-    sizeMetres: "Kürzere Bildschirmkante (Meter)",
-    topBearing: "Kompasswinkel am oberen Bildschirmrand (Grad)",
-    defaultSpeed: "Ersatzgeschwindigkeit (km/h)",
-    direction: "Flugrichtung",
-    heading: "Automatisch von Flightradar24", left: "Links", right: "Rechts",
-    number: "Flugnummer anzeigen",
-    origin: "Startflughafen anzeigen",
-    destination: "Zielflughafen anzeigen",
-    airportFormat: "Flughafendarstellung",
-    code: "Kürzel (IATA/ICAO)", name: "Ausgeschrieben", both: "Kürzel und Name",
-    size: "Flugzeuggröße (Pixel)", fps: "Maximale Bildrate (FPS)"
+    duration:"Flugdauer (Sek.)", topBearing:"Oben zeigt nach (°)",
+    direction:"Flugrichtung", heading:"Automatisch", left:"Links", right:"Rechts",
+    number:"Flugnummer", origin:"Startflughafen", destination:"Zielflughafen",
+    airportFormat:"Flughäfen als", code:"Kürzel", name:"Name", both:"Beides",
+    size:"Flugzeuggröße", trails:"Kondensstreifen"
   },
   en: {
-    intro: "The card follows the predicted flight trajectory across your Home zone.",
-    sizeMetres: "Short screen edge (metres)",
-    topBearing: "Bearing at the top of the display (degrees)",
-    defaultSpeed: "Fallback speed (km/h)",
-    direction: "Flight direction",
-    heading: "Automatic from Flightradar24", left: "Left", right: "Right",
-    number: "Show flight number",
-    origin: "Show origin airport",
-    destination: "Show destination airport",
-    airportFormat: "Airport format",
-    code: "Code (IATA/ICAO)", name: "Full name", both: "Code and name",
-    size: "Aircraft size (pixels)", fps: "Maximum frame rate (FPS)"
+    duration:"Flyover duration (sec)", topBearing:"Top of screen (°)",
+    direction:"Direction", heading:"Automatic", left:"Left", right:"Right",
+    number:"Flight number", origin:"Departure airport", destination:"Arrival airport",
+    airportFormat:"Airport format", code:"Code", name:"Name", both:"Both",
+    size:"Aircraft size", trails:"Contrails"
   }
 };
 class FlightFlyoverEditor extends HTMLElement {
@@ -704,12 +690,8 @@ class FlightFlyoverEditor extends HTMLElement {
       "border-radius:7px;background:var(--card-background-color,white);color:var(--primary-text-color,black);font:inherit}" +
       ".boolean{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--primary-text-color)}" +
       ".boolean input{width:18px;height:18px}" +
-      ".hint{margin:0 0 16px;color:var(--secondary-text-color,#777);line-height:1.4;font-size:13px}";
+      ".field input[type=range]{padding:0;height:30px;accent-color:var(--primary-color,#03a9f4)}";
     shadow.append(css);
-    const hint = document.createElement("p");
-    hint.className = "hint";
-    hint.textContent = strings.intro;
-    shadow.append(hint);
     const createField = (key, label, type, choices) => {
       const wrap = document.createElement("div");
       wrap.className = "field";
@@ -725,12 +707,12 @@ class FlightFlyoverEditor extends HTMLElement {
           control.append(option);
         }
       } else {
-        control.type = "number";
-        control.step = key === "screen_top_bearing" ? "any" : "1";
-        control.min = key === "screen_short_edge_meters" ? "10" : key === "size" ? "120" :
-          key === "default_speed_kmh" ? "20" : "1";
-        if (key !== "screen_top_bearing") control.max = key === "screen_short_edge_meters" ? "100000" :
-          key === "size" ? "700" : key === "default_speed_kmh" ? "1200" : "30";
+        control.type = key === "size" ? "range" : "number";
+        control.step = key === "screen_top_bearing" ? "any" : key === "size" ? "10" : "1";
+        if (key !== "screen_top_bearing") {
+          control.min = key === "size" ? "120" : "5";
+          control.max = key === "size" ? "700" : "90";
+        }
       }
       control.value = this._config[key];
       control.addEventListener("change", () => this._change(key, control));
@@ -748,24 +730,23 @@ class FlightFlyoverEditor extends HTMLElement {
       wrap.append(input, document.createTextNode(label));
       shadow.append(wrap);
     };
-    createField("screen_short_edge_meters", strings.sizeMetres, "number");
+    createField("duration", strings.duration, "number");
     createField("screen_top_bearing", strings.topBearing, "number");
-    createField("default_speed_kmh", strings.defaultSpeed, "number");
     createField("direction", strings.direction, "select", [
       ["heading", strings.heading], ["left", strings.left], ["right", strings.right]
     ]);
-    createField("airport_format", strings.airportFormat, "select", [
-      ["code", strings.code], ["name", strings.name], ["both", strings.both]
-    ]);
+    createField("size", strings.size, "range");
+    check("show_contrails", strings.trails);
     check("show_flight_number", strings.number);
     check("show_origin_airport", strings.origin);
     check("show_destination_airport", strings.destination);
-    createField("size", strings.size, "number");
-    createField("max_fps", strings.fps, "number");
+    createField("airport_format", strings.airportFormat, "select", [
+      ["code", strings.code], ["name", strings.name], ["both", strings.both]
+    ]);
   }
   _change(key, control) {
     const value = control.type === "checkbox" ? control.checked
-      : control.type === "number" ? numberOrNull(control.value) : control.value;
+      : (control.type === "number" || control.type === "range") ? numberOrNull(control.value) : control.value;
     if (value === null) return;
     const updated = configOf({ ...this._config, [key]: value });
     this._config = updated;
@@ -782,6 +763,7 @@ if (!window.customCards.some((card) => card.type === TAG)) {
   window.customCards.push({
     type: TAG,
     name: "Flight Flyover",
+    icon: "mdi:airplane",
     preview: false,
     description: "Real 3D aircraft fly over the dashboard when their projected path crosses your home"
   });
