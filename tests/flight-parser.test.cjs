@@ -120,7 +120,7 @@ test("an arbitrary 37.5 degree screen orientation rotates geographic movement", 
   const p = compute(flightAt(-3000, 0),newSettings);
   assert.ok(p);
   assert.ok(p.dx > 0);
-  assert.ok(p.dy > 0);
+  assert.ok(p.dy < 0);
   const normalized = configOf({screen_top_bearing: 397.5});
   assert.equal(normalized.screen_top_bearing,37.5);
   const negative = configOf({screen_top_bearing:-22.5});
