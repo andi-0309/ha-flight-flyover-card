@@ -23,10 +23,10 @@ const context = {
 };
 vm.runInNewContext(source + "\n globalThis.exportsForTests = {" +
   "modelFor,describe,displayAirport,airportLabel,configOf,homeCoordinates," +
-  "predictFlyover,relativePixels,aircraftYawForScreen,FlightFlyoverCard,FlightFlyoverEditor};", context);
+  "predictFlyover,relativePixels,aircraftYawForScreen,flyoverVisuals,FlightFlyoverCard,FlightFlyoverEditor};", context);
 const {
   modelFor, describe, displayAirport, airportLabel, configOf, homeCoordinates,
-  predictFlyover, relativePixels, aircraftYawForScreen, FlightFlyoverCard, FlightFlyoverEditor
+  predictFlyover, relativePixels, aircraftYawForScreen, flyoverVisuals, FlightFlyoverCard, FlightFlyoverEditor
 } = context.exportsForTests;
 
 const settings = configOf({});
@@ -214,4 +214,53 @@ test("Source uses one pair of static imports and no independent Three.js CDNs", 
   assert.match(actualSource, /import \{ GLTFLoader \} from "three\/addons\/loaders\/GLTFLoader\.js"/);
   assert.doesNotMatch(actualSource, /esm\.sh\/three|GLTFLoader\.js\?bundle/);
   assert.doesNotMatch(actualSource, /camera\.position\.set\(5, 4\.5, 8\)/);
+});
+
+test("cinematic zoom grows on entry, remains large in the middle and shrinks on exit", () => {
+  const enter=flyoverVisuals(0);
+  const approach=flyoverVisuals(0.15);
+  const middle=flyoverVisuals(0.5);
+  const leaving=flyoverVisuals(0.9);
+  const exit=flyoverVisuals(1);
+  assert.ok(enter.distance > approach.distance);
+  assert.ok(approach.distance > middle.distance);
+  assert.ok(leaving.distance > middle.distance);
+  assert.ok(exit.distance > leaving.distance);
+  assert.ok(Math.abs(enter.distance-exit.distance)<1e-10);
+});
+test("aircraft camera moves from near overhead to a mostly side-on angle", () => {
+  const entryAngle=flyoverVisuals(0).elevation*180/Math.PI;
+  const crossingAngle=flyoverVisuals(0.7).elevation*180/Math.PI;
+  assert.ok(entryAngle>70 && entryAngle<85);
+  assert.ok(crossingAngle>20 && crossingAngle<40);
+  assert.ok(entryAngle-crossingAngle>40);
+});
+test("cinematic animation fades gently in and out and stays opaque in the centre", () => {
+  assert.equal(flyoverVisuals(0).opacity,0);
+  assert.equal(flyoverVisuals(1).opacity,0);
+  assert.equal(flyoverVisuals(0.5).opacity,1);
+  assert.equal(flyoverVisuals(-100).opacity,0);
+  assert.equal(flyoverVisuals(200).opacity,0);
+});
+test("nose orientation tracks the movement vector through the entire camera transition", () => {
+  for(const t of [0,.1,.35,.65,.8,1]){
+    const v=flyoverVisuals(t);
+    for(let heading=0;heading<360;heading+=30){
+      const angle=heading*Math.PI/180;
+      const dx=Math.cos(angle),dy=Math.sin(angle);
+      const yaw=aircraftYawForScreen(dx,dy,v.tiltScale);
+      const projectedX=Math.cos(yaw),projectedY=-Math.sin(yaw)*v.tiltScale;
+      const len=Math.hypot(projectedX,projectedY);
+      assert.ok(Math.abs(projectedX/len-dx)<1e-10,heading+" x at "+t);
+      assert.ok(Math.abs(projectedY/len-dy)<1e-10,heading+" y at "+t);
+    }
+  }
+});
+test("animation is rendered from one camera and uses lightweight three-point lighting", () => {
+  const source=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(source,/THREE\.ACESFilmicToneMapping/);
+  assert.match(source,/const fillLight = new THREE\.DirectionalLight/);
+  assert.match(source,/const rimLight = new THREE\.DirectionalLight/);
+  assert.match(source,/visual\.distance \* Math\.sin\(visual\.elevation\)/);
+  assert.match(source,/aircraftYawForScreen\(entry\.plan\.dx, entry\.plan\.dy, visual\.tiltScale\)/);
 });
