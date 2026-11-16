@@ -1,10 +1,14 @@
-<img src="https://raw.githubusercontent.com/andi-0309/ha-flight-flyover-card/main/icon.svg" alt="Flight Flyover Card aircraft icon" width="112" align="right">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/andi-0309/ha-flight-flyover-card/main/icon.svg" width="76" alt="Flight Flyover Card icon">
+</p>
 
-# Flight Flyover Card
+<h1 align="center">Flight Flyover Card</h1>
 
-[![Release](https://img.shields.io/github/v/release/andi-0309/ha-flight-flyover-card)](https://github.com/andi-0309/ha-flight-flyover-card/releases)
-[![Build](https://github.com/andi-0309/ha-flight-flyover-card/actions/workflows/validate.yml/badge.svg)](https://github.com/andi-0309/ha-flight-flyover-card/actions/workflows/validate.yml)
-[![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/andi-0309/ha-flight-flyover-card/releases"><img alt="Release" src="https://img.shields.io/github/v/release/andi-0309/ha-flight-flyover-card"></a>
+  <a href="https://github.com/andi-0309/ha-flight-flyover-card/actions/workflows/validate.yml"><img alt="Build" src="https://github.com/andi-0309/ha-flight-flyover-card/actions/workflows/validate.yml/badge.svg"></a>
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+</p>
 
 **Cinematic 3D aircraft flyovers for Home Assistant dashboards, powered by Flightradar24.**
 
