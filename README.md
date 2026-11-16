@@ -1,4 +1,4 @@
-<img src="icon.svg" alt="Flight Flyover Card icon" width="110" align="right">
+<img src="https://raw.githubusercontent.com/andi-0309/ha-flight-flyover-card/main/icon.svg" alt="Flight Flyover Card aircraft icon" width="112" align="right">
 
 # Flight Flyover Card
 
@@ -6,7 +6,7 @@
 [![Build](https://github.com/andi-0309/ha-flight-flyover-card/actions/workflows/validate.yml/badge.svg)](https://github.com/andi-0309/ha-flight-flyover-card/actions/workflows/validate.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Beautiful 3D aircraft flyovers across your Home Assistant dashboard.**
+**Cinematic 3D aircraft flyovers for Home Assistant dashboards, powered by Flightradar24.**
 
 ## Features
 
