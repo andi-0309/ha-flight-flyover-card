@@ -9,7 +9,9 @@ A Home Assistant Lovelace custom card (MVP): when the [Flightradar24 integration
 - Real 3D GLB models for A320 family, A350, A380, B737 family, B787 family (ICAO aircraft codes mapped to nearest supported family).
 - Other aircraft currently use an **A320 approximation**, not an exact model. If a GLB download fails, a simple procedural aircraft is shown.
 - Frame rate capped at 20 FPS by default, pixel ratio 1, no animation/rendering when idle.
-- Configurable duration, cooldown, airplane size and information labels.
+- Compass-accurate on-screen movement using FR24 `heading` and a configurable north orientation.
+- Realistic transit timing from FR24 `ground_speed` (knots) and the configured real-world length of the display's short edge.
+- Configurable fallback duration, cooldown, airplane size and information labels.
 - **Online requirement:** first use loads the Three.js runtime from esm.sh and the specific GLB file from raw.githubusercontent.com. These are external services; the card will not render a detailed model offline. The assets can be self-hosted via `model_source`, but Three.js still needs the CDN in this version.
 
 ## Installation
@@ -24,11 +26,13 @@ A Home Assistant Lovelace custom card (MVP): when the [Flightradar24 integration
 
 ```yaml
 type: custom:ha-flight-flyover-card
+screen_short_edge_meters: 1000
+screen_top_bearing: 0
+direction: heading
 duration: 6000
 cooldown: 30
 max_fps: 20
 size: 330
-direction: heading
 show_flight_number: true
 show_route: true
 ```
@@ -43,16 +47,24 @@ Copy `dist/ha-flight-flyover-card.js` to `/config/www/ha-flight-flyover-card.js`
 
 | Option | Default | Description |
 |---|---|---|
-| `duration` | `6000` | Flyover time in milliseconds (1500–30000). |
+| `screen_short_edge_meters` | `1000` | Real-world distance represented by the *shorter* dashboard viewport edge in metres (10–100000). |
+| `screen_top_bearing` | `0` | Compass bearing of screen top in degrees: 0 = north, 90 = east, 180 = south, 270 = west. |
+| `duration` | `6000` | **Fallback only:** flyover milliseconds when `ground_speed` is missing or zero (1500–30000). |
 | `cooldown` | `30` | Seconds between flyovers (0–3600). |
 | `max_fps` | `20` | Rendering FPS cap (1–30). |
 | `size` | `330` | Plane canvas width in pixels (120–700). |
-| `direction` | `heading` | Approximate direction (`heading`, `left`, `right`). |
+| `direction` | `heading` | `heading`: geographic direction from FR24 corrected by `screen_top_bearing`; `left` or `right`: manual horizontal overrides. |
 | `show_flight_number` | `true` | Display flight number or callsign. |
 | `show_route` | `true` | Display origin/destination when provided by FR24. |
 | `model_source` | AMVLab raw GitHub URL | Directory URL containing `A320_nologo.glb`, `A350_nologo.glb`, `A380_nologo.glb`, `B737_nologo.glb`, `B787_nologo.glb`. |
 
-Note that `heading` gives only an approximate left/right movement on a 2D screen; it is **not** a geographically accurate projection of the aircraft's path over the house.
+### Speed and direction calculation
+
+FR24 reports `ground_speed` in **knots** and `heading` as degrees clockwise from north. The card converts speed to metres per second (`knots × 1852 / 3600`). It projects the aircraft's heading onto the dashboard, taking `screen_top_bearing` into account. The entire viewport is interpreted as a rectangle of real-world dimensions: its **shorter edge** represents `screen_short_edge_meters`. Its longer dimension is scaled by the browser's aspect ratio.
+
+The aircraft travels along a line through the centre of that rectangle. The line intersects the actual screen borders; an extra margin is added at both ends so the aircraft enters and exits fully. The flyover duration is **distance divided by ground speed** (bounded to 1–120 seconds to avoid pathological cases). If the speed is unavailable or zero, the configured `duration` is used instead. The renderer runs at no more than `max_fps` during a flyover.
+
+`screen_top_bearing` describes what real-world compass direction should appear at the **top** of the dashboard: north-up `0`, south-up `180`. The setting is purely a configurable display orientation; an upright TV does not reveal this value automatically. This is a **centred animation**, not an exact trace of the aircraft's measured latitude/longitude over the house. In windy conditions, its reported heading may also differ slightly from actual ground track.
 
 ## Testing without waiting for an aircraft
 
@@ -68,9 +80,10 @@ aircraft_code: A388
 airport_origin_code_iata: FRA
 airport_destination_code_iata: MUC
 heading: 90
+ground_speed: 400
 ```
 
-This should display a 3D A380 moving right across the whole screen, labelled `LH123` and `FRA → MUC`. To test another flyover, change the `id` (or wait 10 minutes). Avoid using this test while production flight entries are running, because the card queues up to three events.
+This should display a 3D A380 moving right across the whole screen, labelled `LH123` and `FRA → MUC`. At the default scale, the duration is calculated from `400` knots and the 1,000-metre short edge. Change `screen_top_bearing` to `180` to reverse the apparent direction of a northbound test flight. To test another flyover, change the `id` (or wait 10 minutes). Avoid using this test while production flight entries are running, because the card queues up to three events.
 
 ## Architecture and compatibility
 
