@@ -51,7 +51,69 @@ test("aircraft downloads come from known model sources and have fallbacks", () =
     assert.match(choices[0].url,/^https:\/\/raw\.githubusercontent\.com\//);
     assert.ok(choices.every(x=>x.url.endsWith(".glb")));
   }
-  assert.match(modelCandidates("B748")[0].url,/\/b748\.glb$/);
+  assert.match(modelCandidates("B748")[0].url,/\/b748\/glTF2\/B748\.glb$/);
+});
+
+test("every source uses a per-file heading calibration, including 747-8", () => {
+  const orientations={
+    A319:["+Z","a320/glTF2/A319.glb"],
+    A321:["+Z","a320/glTF2/A321.glb"],
+    A330:["+Z","a333/glTF2/A333.glb"],
+    A332:["+Z","a332/glTF2/A332.glb"],
+    A340:["+Z","a343/glTF2/A343.glb"],
+    B744:["+Z","b744/glTF2/B747.glb"],
+    B748:["+Z","b748/glTF2/B748.glb"],
+    B752:["+X","b752/glTF2/B752.glb"],
+    B763:["+Z","b767/glTF2/B763.glb"],
+    B788:["+Z","b788/glTF2/B788.glb"],
+    E170:["+Z","e190/glTF2/E170.glb"],
+    E190:["+Z","e190/glTF2/E190.glb"],
+    E195:["+Z","e190/glTF2/E190.glb"],
+    C182:["+Z","c182/glTF2/C182.glb"],
+    C208:["+Z","c208/glTF2/C208.glb"],
+    PA18:["-Z","pa18/glTF2/PA18.glb"],
+    PA28:["+Z","pa28/glTF2/PA28.glb"],
+    SR22:["+Z","sr22/glTF2/SR22.glb"],
+    PC12:["+Z","pc12/glTF2/PC12.glb"],
+    ATR42:["+Z","atr42/glTF2/AT45.glb"],
+    ATR72:["+Z","atr72/glTF2/AT75.glb"],
+    CRJ7:["+Z","crj9/glTF2/CRJ7.glb"],
+    CRJ9:["+Z","crj9/glTF2/CRJ9.glb"],
+    CITATION:["+Z","c550/glTF2/C550.glb"]
+  };
+  for(const [type,[forward,path]] of Object.entries(orientations)){
+    const selected=modelCandidates(type)[0];
+    assert.ok(selected.url.endsWith(path),type+" wrong source: "+selected.url);
+    assert.equal(selected.forward,forward,type+" wrong nose axis");
+  }
+  assert.equal(modelCandidates("A320")[0].forward,"+X");
+  assert.equal(modelCandidates("C172")[0].forward,"-X");
+  assert.equal(modelCandidates("B789")[0].forward,"-X");
+  // Explicitly verify the fallback is calibrated to its OWN asset source.
+  const fallback=modelCandidates("B748")[1];
+  assert.equal(fallback.forward,"-X");
+  assert.ok(fallback.url.endsWith("/airplane.glb"));
+});
+
+test("FR24 glTF1 assets are excluded; every candidate uses a GLB2 source", () => {
+  const types=["A320","A330","A332","A340","B737","B738","B744","B748",
+    "B752","B763","B772","B773","B777","B788","B789","E170","E190",
+    "C172","C182","C208","PA18","PA28","PA32","SR22","PC12","ATR72",
+    "CRJ9","GLIDER","HELI","CITATION","B407"];
+  for(const type of types){
+    const selected=modelCandidates(type);
+    assert.ok(selected.length>0,type);
+    for(const asset of selected){
+      assert.ok(asset.url.startsWith("https://raw.githubusercontent.com/"),type);
+      assert.ok(asset.url.endsWith(".glb"),type);
+      assert.ok(["+X","-X","+Z","-Z"].includes(asset.forward),type);
+      assert.ok(!asset.url.includes("fr24-3d-models"),"obsolete glTF1 asset for "+type);
+    }
+  }
+  const code=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(code,/aligned\.rotation\.y=normalizeNose\(candidate\.forward\)/);
+  assert.match(code,/aligned\.add\(result\.scene\)/);
+  assert.doesNotMatch(code,/result\.scene\.rotation\.y=/);
 });
 
 test("source model axes rotate onto the +X-forward standard", () => {
