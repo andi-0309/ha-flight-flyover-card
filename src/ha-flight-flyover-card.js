@@ -241,15 +241,11 @@ function describe(raw) {
   const data = raw && typeof raw === "object"
     ? (raw.data && typeof raw.data === "object" ? raw.data : raw) : {};
   const heading = numberOrNull(data.heading ?? data.track ?? data.course);
-  const speed = numberOrNull(data.ground_speed);
   return {
     id: firstValue(data, "id", "flight_number", "callsign", "aircraft_registration"),
     number: firstValue(data, "flight_number", "callsign", "number", "aircraft_registration") || "Unbekannter Flug",
     model: modelFor(firstValue(data, "aircraft_code", "aircraft_type", "type", "model")),
     heading: heading === null ? null : degrees(heading),
-    groundSpeed: speed !== null && speed > 0 ? speed : null,
-    latitude: numberOrNull(data.latitude),
-    longitude: numberOrNull(data.longitude),
     origin: {
       code: firstValue(data, "airport_origin_code_iata", "airport_origin_code_icao", "from_iata", "from_icao"),
       name: firstValue(data, "airport_origin_name", "airport_origin_city", "from_name", "from_city")
