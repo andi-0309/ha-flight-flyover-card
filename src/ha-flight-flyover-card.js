@@ -345,6 +345,7 @@ class FlightFlyoverCard extends HTMLElement {
     this._seen.clear();
     this._layer?.remove();
     this._layer = null;
+    this._trailsRoot = null;
     this._modelPromises.clear();
     this._threePromise = null;
   }
@@ -396,23 +397,87 @@ class FlightFlyoverCard extends HTMLElement {
     layer.style.cssText = "position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:2147483000;contain:layout style";
     const stylesheet = document.createElement("style");
     stylesheet.textContent =
-      ".ff-ship{position:absolute;left:0;top:0;will-change:transform;display:flex;align-items:center;flex-direction:column;isolation:isolate}" +
-      ".ff-shadow{position:absolute;left:5%;top:39%;width:90%;height:43%;border-radius:50%;z-index:0;" +
-      "background:radial-gradient(ellipse at center,rgba(7,17,28,.29) 0%,rgba(7,17,28,.17) 36%," +
-      "rgba(7,17,28,.07) 62%,transparent 100%);filter:blur(16px);pointer-events:none;" +
-      "will-change:transform,opacity;transform-origin:center}" +
-      ".ff-scene{position:relative;z-index:1;width:100%;aspect-ratio:1.5;filter:drop-shadow(0 5px 7px rgba(0,0,0,.18))}" +
-      ".ff-scene canvas{display:block;width:100%;height:100%}" +
-      ".ff-label{position:relative;z-index:2;font:600 15px/1.35 Arial,sans-serif;padding:6px 12px;" +
-      "margin-top:-42px;border-radius:9px;color:white;background:rgba(14,27,43,.86);" +
-      "text-align:center;max-width:85vw;overflow:hidden;text-overflow:ellipsis;" +
-      "box-shadow:0 3px 10px rgba(0,0,0,.18)}" +
+      ".ff-ship{position:absolute;left:0;top:0;will-change:transform,opacity;display:flex;" +
+      "align-items:center;flex-direction:column}" +
+      ".ff-scene{position:relative;width:100%;aspect-ratio:1.5}" +
+      ".ff-scene canvas{display:block;width:100%;height:100%;" +
+      "filter:drop-shadow(0 14px 9px rgba(15,27,42,.14))}" +
+      ".ff-label{position:relative;z-index:2;font:600 15px/1.35 Arial,sans-serif;" +
+      "padding:6px 12px;margin-top:-72px;border-radius:9px;color:#fff;" +
+      "background:rgba(14,27,43,.86);text-align:center;max-width:85vw;" +
+      "overflow:hidden;text-overflow:ellipsis;box-shadow:0 3px 9px rgba(0,0,0,.14)}" +
       ".ff-route{font-size:12px;font-weight:400;margin-top:2px;white-space:nowrap}" +
       ".ff-placeholder{font:80px/1 Arial,sans-serif;color:white;text-align:center;padding-top:30px}";
-    layer.append(stylesheet);
+    const trails = document.createElementNS(SVG_NS, "svg");
+    trails.setAttribute("viewBox", "0 0 " + window.innerWidth + " " + window.innerHeight);
+    trails.setAttribute("preserveAspectRatio", "none");
+    trails.style.cssText = "position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none";
+    layer.append(stylesheet, trails);
     document.body.append(layer);
-    this._layer = layer;
+    this._layer=layer;
+    this._trailsRoot=trails;
     return layer;
+  }
+  _createTrails() {
+    if (!this._config.show_contrails) return null;
+    this._ensureLayer();
+    const group=document.createElementNS(SVG_NS,"g");
+    const gradient=document.createElementNS(SVG_NS,"linearGradient");
+    gradient.setAttribute("id","flight-trail-"+(++this._trailCounter)+"-"+Math.floor(performance.now()));
+    gradient.setAttribute("gradientUnits","userSpaceOnUse");
+    for(const [offset,opacity] of [["0%","0"],["35%","0.13"],["100%","0.56"]]){
+      const stop=document.createElementNS(SVG_NS,"stop");
+      stop.setAttribute("offset",offset);
+      stop.setAttribute("stop-color","#edf8ff");
+      stop.setAttribute("stop-opacity",opacity);
+      gradient.append(stop);
+    }
+    const defs=document.createElementNS(SVG_NS,"defs");
+    defs.append(gradient);
+    group.append(defs);
+    const paths=[];
+    for(let i=0;i<2;i++){
+      const path=document.createElementNS(SVG_NS,"path");
+      path.setAttribute("fill","none");
+      path.setAttribute("stroke","url(#"+gradient.getAttribute("id")+")");
+      path.setAttribute("stroke-width","5");
+      path.setAttribute("stroke-linecap","round");
+      path.setAttribute("stroke-linejoin","round");
+      path.style.filter="blur(1.6px)";
+      group.append(path);
+      paths.push(path);
+    }
+    this._trailsRoot.append(group);
+    return {group,gradient,paths,samples:[[],[]],lastSample:-Infinity};
+  }
+  _drawTrails(context, plan, progress, time) {
+    const trails=context.trails;
+    if(!trails || time-trails.lastSample < 85) return;
+    trails.lastSample=time;
+    const pos=flightPosition(plan,progress);
+    const normalX=-plan.dy,normalY=plan.dx;
+    const rear=this._config.size*.07;
+    const separation=this._config.size*.115;
+    for(let i=0;i<2;i++){
+      const side=i===0?-1:1;
+      const px=pos.x-plan.dx*rear+normalX*separation*side;
+      const py=pos.y-plan.dy*rear+normalY*separation*side;
+      const samples=trails.samples[i];
+      samples.push({x:px,y:py,time});
+      while(samples.length && time-samples[0].time>TRAIL_LIFETIME_MS) samples.shift();
+      if(samples.length>1){
+        const d=samples.map((p,j)=>(j?"L":"M")+p.x.toFixed(2)+","+p.y.toFixed(2)).join(" ");
+        trails.paths[i].setAttribute("d",d);
+      }
+    }
+    const points=trails.samples[0];
+    if(points.length>1){
+      const first=points[0],last=points[points.length-1];
+      trails.gradient.setAttribute("x1",String(first.x));
+      trails.gradient.setAttribute("y1",String(first.y));
+      trails.gradient.setAttribute("x2",String(last.x));
+      trails.gradient.setAttribute("y2",String(last.y));
+    }
   }
   _getThree() {
     // Both imports above are resolved from the SAME npm three package by
@@ -452,153 +517,126 @@ class FlightFlyoverCard extends HTMLElement {
     return scene.clone(true);
   }
   _makeShip(entry) {
-    const ship = document.createElement("div");
-    ship.className = "ff-ship";
-    ship.style.width = this._config.size + "px";
-    const shadow = document.createElement("div");
-    shadow.className = "ff-shadow";
-    const surface = document.createElement("div");
-    surface.className = "ff-scene";
-    ship.append(shadow, surface);
-    const number = this._config.show_flight_number ? entry.flight.number : "";
-    const route = airportLabel(entry.flight, this._config);
-    if (number || route) {
-      const label = document.createElement("div");
-      label.className = "ff-label";
-      if (number) {
-        const title = document.createElement("div");
-        title.textContent = number;
+    const ship=document.createElement("div");
+    ship.className="ff-ship";
+    ship.style.width=this._config.size+"px";
+    ship.style.opacity="0";
+    const surface=document.createElement("div");
+    surface.className="ff-scene";
+    ship.append(surface);
+    const number=this._config.show_flight_number?entry.flight.number:"";
+    const route=airportLabel(entry.flight,this._config);
+    if(number || route){
+      const label=document.createElement("div");
+      label.className="ff-label";
+      if(number){
+        const title=document.createElement("div");
+        title.textContent=number;
         label.append(title);
       }
-      if (route) {
-        const routeLine = document.createElement("div");
-        routeLine.className = "ff-route";
-        routeLine.textContent = route;
-        label.append(routeLine);
+      if(route){
+        const line=document.createElement("div");
+        line.className="ff-route";
+        line.textContent=route;
+        label.append(line);
       }
       ship.append(label);
     }
     this._ensureLayer().append(ship);
-    return { ship, surface, shadow, renderer: null, scene: null, plane: null, frame: 0, lastFrame: 0 };
+    return {ship,surface,renderer:null,frame:0,trails:this._createTrails()};
   }
   async _begin(entry) {
-    if (!this.isConnected || document.hidden || Date.now() >= entry.endAt) return;
-    // Simultaneous flights render concurrently; skip excess WebGL contexts on Pi 3B+.
-    if (this._active.size >= MAX_ACTIVE) return;
-    const context = this._makeShip(entry);
-    this._active.set(entry.id, context);
+    if(!this.isConnected || document.hidden || this._active.size>=MAX_ACTIVE) return;
+    const context=this._makeShip(entry);
+    this._active.set(entry.id,context);
+    let airplane=null,scene=null,camera=null;
     try {
-      const [{ THREE }, airplane] = await Promise.all([this._getThree(), this._getModel(entry.flight.model)]);
-      if (!this.isConnected || !this._active.has(entry.id)) return;
-      const renderer = new THREE.WebGLRenderer({
-        antialias: false, alpha: true, powerPreference: "low-power"
+      const [{THREE},loaded]=await Promise.all([this._getThree(),this._getModel(entry.flight.model)]);
+      if(!this.isConnected || !this._active.has(entry.id))return;
+      const renderer=new THREE.WebGLRenderer({
+        antialias:false,alpha:true,powerPreference:"low-power"
       });
-      context.renderer = renderer;
+      context.renderer=renderer;
       renderer.setPixelRatio(1);
-      renderer.setSize(this._config.size, Math.round(this._config.size / 1.5), false);
-      renderer.setClearColor(0x000000, 0);
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      // Filmic tone mapping preserves highlights without making pale fuselages
-      // look flat, even against a bright Home Assistant theme.
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.35;
+      renderer.setSize(this._config.size,Math.round(this._config.size/1.5),false);
+      renderer.setClearColor(0x000000,0);
+      renderer.outputColorSpace=THREE.SRGBColorSpace;
+      renderer.toneMapping=THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure=1.35;
       context.surface.replaceChildren(renderer.domElement);
-      const scene = new THREE.Scene();
-      // Three inexpensive lights: warm sunlight, cool sky fill, and a clean
-      // highlight along the wings/tail. No heavyweight environment map.
-      scene.add(new THREE.HemisphereLight(0xf9fcff, 0x738eaa, 1.7));
-      const sunlight = new THREE.DirectionalLight(0xfff0da, 3.2);
-      sunlight.position.set(-5, 8, 6);
-      scene.add(sunlight);
-      const fillLight = new THREE.DirectionalLight(0xc5dfff, 1.7);
-      fillLight.position.set(5, 3, 3);
-      scene.add(fillLight);
-      const rimLight = new THREE.DirectionalLight(0xffffff, 2.2);
-      rimLight.position.set(2, 6, -7);
-      scene.add(rimLight);
+      scene=new THREE.Scene();
+      scene.add(new THREE.HemisphereLight(0xf9fcff,0x738eaa,1.7));
+      const sun=new THREE.DirectionalLight(0xfff0da,3.2);
+      sun.position.set(-5,8,6);
+      scene.add(sun);
+      const fill=new THREE.DirectionalLight(0xc5dfff,1.7);
+      fill.position.set(5,3,3);
+      scene.add(fill);
+      const rim=new THREE.DirectionalLight(0xffffff,2.2);
+      rim.position.set(2,6,-7);
+      scene.add(rim);
+      airplane=loaded;
       scene.add(airplane);
-      context.scene = scene;
-      context.plane = airplane;
-      const camera = new THREE.PerspectiveCamera(36, 1.5, .1, 1000);
-      // Top-oriented oblique camera: world +X is screen-right, -Z is screen-up.
-      // This keeps model nose direction consistent with screen motion.
-      camera.up.set(0, 0, -1);
-      const draw = (time) => {
-        if (!this._active.has(entry.id) || !this.isConnected || document.hidden || Date.now() >= entry.endAt) {
-          this._removeActive(entry.id);
-          return;
-        }
-        const progress = Math.max(0, Math.min(1, (Date.now() - entry.startAt) / (entry.endAt - entry.startAt)));
-        const x = entry.plan.startX + (entry.plan.endX - entry.plan.startX) * progress;
-        const y = entry.plan.startY + (entry.plan.endY - entry.plan.startY) * progress;
-        context.ship.style.transform = "translate3d(" +
-          Math.round(x - this._config.size / 2) + "px," +
-          Math.round(y - this._config.size * .4) + "px,0)";
-        if (time - context.lastFrame >= 1000 / this._config.max_fps) {
-          const visual = flyoverVisuals(progress);
-          camera.position.set(
-            0,
-            visual.distance * Math.sin(visual.elevation),
-            visual.distance * Math.cos(visual.elevation)
-          );
-          camera.lookAt(0, 0, 0);
-          // Yaw must account for the changing camera pitch, or the airplane
-          // appears to drift sideways during the top-to-side transition.
-          airplane.rotation.y = aircraftYawForScreen(entry.plan.dx, entry.plan.dy, visual.tiltScale);
-          // Gentle bank around the aircraft's longitudinal (+X) axis.
-          airplane.rotation.x = Math.sin(progress * Math.PI) * .04;
-          airplane.rotation.z = 0;
-          context.ship.style.opacity = visual.opacity.toFixed(3);
-          const shadow=shadowVisuals(progress);
-          context.shadow.style.opacity=shadow.opacity.toFixed(3);
-          context.shadow.style.transform="translate3d("+shadow.offsetX.toFixed(1)+"px,"+
-            shadow.offsetY.toFixed(1)+"px,0) scale("+shadow.scaleX.toFixed(3)+","+
-            shadow.scaleY.toFixed(3)+")";
-          renderer.render(scene, camera);
-          context.lastFrame = time;
-        }
-        context.frame = requestAnimationFrame(draw);
-      };
-      context.frame = requestAnimationFrame(draw);
-    } catch (error) {
-      console.warn("[Flight Flyover] Cannot load or render 3D aircraft", error);
-      if (this._active.has(entry.id)) {
-        // Still animate a simple visual if WebGL or the external model is unavailable.
-        context.surface.replaceChildren();
-        const fallback = document.createElement("div");
-        fallback.className = "ff-placeholder";
-        fallback.textContent = "✈";
-        context.surface.append(fallback);
-        const draw = () => {
-          if (!this._active.has(entry.id) || !this.isConnected || document.hidden || Date.now() >= entry.endAt) {
-            this._removeActive(entry.id); return;
-          }
-          const t = Math.max(0, Math.min(1, (Date.now() - entry.startAt) / (entry.endAt - entry.startAt)));
-          const x = entry.plan.startX + (entry.plan.endX - entry.plan.startX) * t;
-          const y = entry.plan.startY + (entry.plan.endY - entry.plan.startY) * t;
-          context.ship.style.transform = "translate3d(" + Math.round(x - this._config.size / 2) +
-            "px," + Math.round(y - this._config.size * .4) + "px,0)";
-          const visual = flyoverVisuals(t);
-          context.ship.style.opacity = visual.opacity.toFixed(3);
-          context.surface.style.transform = "scale(" + visual.fallbackScale.toFixed(3) + ")";
-          const shadow=shadowVisuals(t);
-          context.shadow.style.opacity=shadow.opacity.toFixed(3);
-          context.shadow.style.transform="translate3d("+shadow.offsetX.toFixed(1)+"px,"+
-            shadow.offsetY.toFixed(1)+"px,0) scale("+shadow.scaleX.toFixed(3)+","+
-            shadow.scaleY.toFixed(3)+")";
-          context.frame = requestAnimationFrame(draw);
-        };
-        context.frame = requestAnimationFrame(draw);
-      }
+      camera=new THREE.PerspectiveCamera(36,1.5,.1,1000);
+      camera.up.set(0,0,-1);
+    } catch(error) {
+      console.warn("[Flight Flyover] 3D model unavailable; using symbol",error);
+      if(!this._active.has(entry.id))return;
+      context.renderer?.dispose();
+      context.renderer=null;
+      const fallback=document.createElement("div");
+      fallback.className="ff-placeholder";
+      fallback.textContent="✈";
+      context.surface.replaceChildren(fallback);
     }
+    // Start AFTER asset loading. A requestAnimationFrame timestamp drives both
+    // translation and camera: no Date.now jitter, no integer pixel rounding,
+    // no WebGL frame-rate gate that freezes the model between positions.
+    context.startedAt=null;
+    const draw=(time)=>{
+      if(!this.isConnected || !this._active.has(entry.id) || document.hidden){
+        this._removeActive(entry.id);
+        return;
+      }
+      if(context.startedAt===null)context.startedAt=time;
+      const t=Math.min(1,Math.max(0,(time-context.startedAt)/entry.durationMs));
+      const pos=flightPosition(entry.plan,t);
+      const size=this._config.size;
+      context.ship.style.transform="translate3d("+
+        (pos.x-size/2).toFixed(2)+"px,"+(pos.y-size*.4).toFixed(2)+"px,0)";
+      const visuals=flyoverVisuals(t);
+      context.ship.style.opacity=String(visuals.opacity);
+      if(context.renderer && airplane){
+        camera.position.set(0,
+          visuals.distance*Math.sin(visuals.elevation),
+          visuals.distance*Math.cos(visuals.elevation));
+        camera.lookAt(0,0,0);
+        airplane.rotation.y=aircraftYawForScreen(entry.plan.dx,entry.plan.dy,visuals.tiltScale);
+        airplane.rotation.x=Math.sin(t*Math.PI)*.04;
+        airplane.rotation.z=0;
+        context.renderer.render(scene,camera);
+      }else{
+        context.surface.style.transform="scale("+visuals.fallbackScale.toFixed(3)+")";
+      }
+      this._drawTrails(context,entry.plan,t,time);
+      if(t<1)context.frame=requestAnimationFrame(draw);
+      else this._removeActive(entry.id);
+    };
+    context.frame=requestAnimationFrame(draw);
   }
   _removeActive(id) {
-    const context = this._active.get(id);
-    if (!context) return;
+    const context=this._active.get(id);
+    if(!context)return;
     cancelAnimationFrame(context.frame);
     context.renderer?.dispose();
     context.renderer?.forceContextLoss();
     context.ship.remove();
+    if(context.trails){
+      const group=context.trails.group;
+      group.style.transition="opacity 4000ms ease-out";
+      group.style.opacity="0";
+      setTimeout(()=>group.remove(),4100);
+    }
     this._active.delete(id);
   }
   static getConfigElement() { return document.createElement(EDITOR_TAG); }
