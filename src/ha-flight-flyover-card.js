@@ -172,6 +172,19 @@ function flyoverVisuals(progress) {
     fallbackScale: 8.5 / distance
   };
 }
+function shadowVisuals(progress) {
+  const t=Math.max(0,Math.min(1,Number.isFinite(progress)?progress:0));
+  // Wide feathered shadow always stays behind the airframe, with very subtle
+  // growth at mid-flight to sell the illusion of depth over Lovelace cards.
+  const passing=Math.sin(Math.PI*t);
+  return {
+    scaleX: 1.2+passing*.24,
+    scaleY: .74+passing*.13,
+    opacity: .40+passing*.22,
+    offsetX: 8+passing*5,
+    offsetY: 21+passing*7
+  };
+}
 function modelFor(value) {
   const c=textValue(value).toUpperCase().replace(/[^A-Z0-9]/g,"");
   // Airbus: nearest matching real airframe when the exact variant is absent.
@@ -444,12 +457,17 @@ class FlightFlyoverCard extends HTMLElement {
     layer.style.cssText = "position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:2147483000;contain:layout style";
     const stylesheet = document.createElement("style");
     stylesheet.textContent =
-      ".ff-ship{position:absolute;left:0;top:0;will-change:transform;display:flex;align-items:center;flex-direction:column;" +
-      "filter:drop-shadow(0 6px 12px rgba(0,0,0,.34))}" +
-      ".ff-scene{width:100%;aspect-ratio:1.5}" +
+      ".ff-ship{position:absolute;left:0;top:0;will-change:transform;display:flex;align-items:center;flex-direction:column;isolation:isolate}" +
+      ".ff-shadow{position:absolute;left:5%;top:39%;width:90%;height:43%;border-radius:50%;z-index:0;" +
+      "background:radial-gradient(ellipse at center,rgba(7,17,28,.29) 0%,rgba(7,17,28,.17) 36%," +
+      "rgba(7,17,28,.07) 62%,transparent 100%);filter:blur(16px);pointer-events:none;" +
+      "will-change:transform,opacity;transform-origin:center}" +
+      ".ff-scene{position:relative;z-index:1;width:100%;aspect-ratio:1.5;filter:drop-shadow(0 5px 7px rgba(0,0,0,.18))}" +
       ".ff-scene canvas{display:block;width:100%;height:100%}" +
-      ".ff-label{font:600 15px/1.35 Arial,sans-serif;padding:6px 12px;border-radius:9px;color:white;" +
-      "background:rgba(14,27,43,.86);text-align:center;max-width:85vw;overflow:hidden;text-overflow:ellipsis}" +
+      ".ff-label{position:relative;z-index:2;font:600 15px/1.35 Arial,sans-serif;padding:6px 12px;" +
+      "margin-top:-42px;border-radius:9px;color:white;background:rgba(14,27,43,.86);" +
+      "text-align:center;max-width:85vw;overflow:hidden;text-overflow:ellipsis;" +
+      "box-shadow:0 3px 10px rgba(0,0,0,.18)}" +
       ".ff-route{font-size:12px;font-weight:400;margin-top:2px;white-space:nowrap}" +
       ".ff-placeholder{font:80px/1 Arial,sans-serif;color:white;text-align:center;padding-top:30px}";
     layer.append(stylesheet);
@@ -498,9 +516,11 @@ class FlightFlyoverCard extends HTMLElement {
     const ship = document.createElement("div");
     ship.className = "ff-ship";
     ship.style.width = this._config.size + "px";
+    const shadow = document.createElement("div");
+    shadow.className = "ff-shadow";
     const surface = document.createElement("div");
     surface.className = "ff-scene";
-    ship.append(surface);
+    ship.append(shadow, surface);
     const number = this._config.show_flight_number ? entry.flight.number : "";
     const route = airportLabel(entry.flight, this._config);
     if (number || route) {
@@ -520,7 +540,7 @@ class FlightFlyoverCard extends HTMLElement {
       ship.append(label);
     }
     this._ensureLayer().append(ship);
-    return { ship, surface, renderer: null, scene: null, plane: null, frame: 0, lastFrame: 0 };
+    return { ship, surface, shadow, renderer: null, scene: null, plane: null, frame: 0, lastFrame: 0 };
   }
   async _begin(entry) {
     if (!this.isConnected || document.hidden || Date.now() >= entry.endAt) return;
@@ -590,6 +610,11 @@ class FlightFlyoverCard extends HTMLElement {
           airplane.rotation.x = Math.sin(progress * Math.PI) * .04;
           airplane.rotation.z = 0;
           context.ship.style.opacity = visual.opacity.toFixed(3);
+          const shadow=shadowVisuals(progress);
+          context.shadow.style.opacity=shadow.opacity.toFixed(3);
+          context.shadow.style.transform="translate3d("+shadow.offsetX.toFixed(1)+"px,"+
+            shadow.offsetY.toFixed(1)+"px,0) scale("+shadow.scaleX.toFixed(3)+","+
+            shadow.scaleY.toFixed(3)+")";
           renderer.render(scene, camera);
           context.lastFrame = time;
         }
@@ -617,6 +642,11 @@ class FlightFlyoverCard extends HTMLElement {
           const visual = flyoverVisuals(t);
           context.ship.style.opacity = visual.opacity.toFixed(3);
           context.surface.style.transform = "scale(" + visual.fallbackScale.toFixed(3) + ")";
+          const shadow=shadowVisuals(t);
+          context.shadow.style.opacity=shadow.opacity.toFixed(3);
+          context.shadow.style.transform="translate3d("+shadow.offsetX.toFixed(1)+"px,"+
+            shadow.offsetY.toFixed(1)+"px,0) scale("+shadow.scaleX.toFixed(3)+","+
+            shadow.scaleY.toFixed(3)+")";
           context.frame = requestAnimationFrame(draw);
         };
         context.frame = requestAnimationFrame(draw);
