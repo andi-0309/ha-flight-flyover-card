@@ -13,14 +13,16 @@ A lightweight Home Assistant dashboard card that shows **realistic 3D aircraft a
 - Origin and destination airports can each be enabled independently. Show **IATA/ICAO code**, **full name**, or **both**.
 - **Visual Lovelace editor:** configure the card in Home Assistant's graphical dashboard editor, no manual YAML needed.
 - Transparent, click-through `document.body` overlay above *all dashboard cards*.
-- Five compact GLB model families: A320, A350, A380, B737 and B787. Other aircraft use an approximate A320 model. Three.js and a model are loaded only when needed.
+- Five compact GLB model families: A320, A350, A380, B737 and B787. Other aircraft use an approximate A320 model. Three.js and GLTFLoader are bundled together once in the Marketplace module; a GLB aircraft model is fetched on demand.
+- Cinematic flyover: smooth zoom-in on approach, zoom-out on departure, camera descending from a near-overhead view to a side profile, gentle banking and three-point lighting (warm sunlight, cool sky fill, soft edge highlights).
+- The aircraft's nose remains aligned with its real travel direction even as the camera angle changes.
 - Optimized for kiosk displays: maximum 20 FPS by default, pixel ratio 1; at most three concurrent WebGL aircraft. Multiple flights can overlap, but further simultaneous flights are skipped to protect low-power hardware.
 
 ### Limitations
 
 The trajectory is a **prediction** based on one FR24 entry snapshot. The card does not follow course changes or speed changes after the event. It projects the flight onto a flat local map around your Home zone. It is not a live radar display or a guarantee the aircraft will actually pass overhead. **Events without position or heading are ignored** because a geographic flyover cannot be predicted. An aircraft may be visible when it crosses the configured screen footprint without passing exactly over the point representing your house.
 
-The first animation needs network access to `esm.sh` (Three.js) and `raw.githubusercontent.com` (3D models). On load failure, a simple plane symbol is animated instead. GPU performance on Raspberry Pi 3B+ should be checked on the target device.
+The bundled Three.js/GLTFLoader does not require an external runtime CDN. A newly selected 3D model is still downloaded from `raw.githubusercontent.com`. On WebGL or model failure, a simplified plane symbol is animated instead. The camera and lighting animations change transforms only; no expensive shadow maps or environment textures are used. GPU performance on Raspberry Pi 3B+ should be checked on the target device.
 
 ## Installation (Home Assistant Marketplace, 2026.11+)
 
@@ -92,6 +94,6 @@ Home Assistant's **Marketplace detects new stable GitHub releases** and displays
 
 ## Development & licensing
 
-The Marketplace installs `dist/ha-flight-flyover-card.js`. Check the source with `node --check dist/ha-flight-flyover-card.js` and run tests with `node --test tests/*.test.cjs`. GitHub Actions runs both and publishes stable versioned releases on successful `main` pushes.
+The editable source lives in `src/ha-flight-flyover-card.js`. Run `npm install && npm run build && npm test` to create the single bundled module `dist/ha-flight-flyover-card.js`. The build pins the Three.js package so the renderer and GLTFLoader share exactly one instance. GitHub Actions checks and builds the source and publishes versioned releases after successful `main` pushes.
 
 The card source is MIT licensed. The logo-free GLB models come from [AMVLab aircraft-models](https://github.com/amvlab/aircraft-models) and are CC BY 4.0. See [ATTRIBUTION.md](ATTRIBUTION.md). The model source is built into the card and cannot be changed in Lovelace settings.
