@@ -81,19 +81,18 @@ function normalizeNose(angle) {
   // aircraftYawForScreen() keeps the nose pointed along the actual flight path.
   return ({"+X":0,"-Z":-Math.PI/2,"-X":Math.PI,"+Z":Math.PI/2})[angle] ?? 0;
 }
-const KNOT_TO_METERS_PER_SECOND = 1852 / 3600;
-const METERS_PER_DEGREE = 111320;
-const MAX_ACTIVE = 3; // Protect low-power kiosk GPUs from too many WebGL contexts.
+const MAX_ACTIVE = 3; // Keep the number of WebGL contexts bounded on kiosks.
+const TRAIL_LIFETIME_MS = 5000;
+const SVG_NS = "http://www.w3.org/2000/svg";
 const DEFAULTS = Object.freeze({
-  screen_short_edge_meters: 1000,
+  duration: 20,
   screen_top_bearing: 0,
-  default_speed_kmh: 200,
   direction: "heading",
   show_flight_number: true,
   show_origin_airport: true,
   show_destination_airport: true,
   airport_format: "code",
-  max_fps: 20,
+  show_contrails: true,
   size: 330
 });
 function textValue(value) {
@@ -118,15 +117,14 @@ function degrees(value) { return (((value % 360) + 360) % 360); }
 function configOf(input = {}) {
   const choice = (value, allowed, fallback) => allowed.includes(value) ? value : fallback;
   return {
-    screen_short_edge_meters: clamp(input.screen_short_edge_meters, 10, 100000, DEFAULTS.screen_short_edge_meters),
+    duration: clamp(input.duration, 5, 90, DEFAULTS.duration),
     screen_top_bearing: degrees(numberOrNull(input.screen_top_bearing) ?? DEFAULTS.screen_top_bearing),
-    default_speed_kmh: clamp(input.default_speed_kmh, 20, 1200, DEFAULTS.default_speed_kmh),
     direction: choice(input.direction, ["heading", "left", "right"], DEFAULTS.direction),
     show_flight_number: input.show_flight_number !== false,
     show_origin_airport: input.show_origin_airport !== false,
     show_destination_airport: input.show_destination_airport !== false,
     airport_format: choice(input.airport_format, ["code", "name", "both"], DEFAULTS.airport_format),
-    max_fps: clamp(input.max_fps, 1, 30, DEFAULTS.max_fps),
+    show_contrails: input.show_contrails !== false,
     size: clamp(input.size, 120, 700, DEFAULTS.size)
   };
 }
@@ -165,19 +163,6 @@ function flyoverVisuals(progress) {
     opacity: Math.min(smoothstep(0, 0.07, t), 1 - smoothstep(0.93, 1, t)),
     // Used only when the full 3D model cannot be rendered.
     fallbackScale: 8.5 / distance
-  };
-}
-function shadowVisuals(progress) {
-  const t=Math.max(0,Math.min(1,Number.isFinite(progress)?progress:0));
-  // Wide feathered shadow always stays behind the airframe, with very subtle
-  // growth at mid-flight to sell the illusion of depth over Lovelace cards.
-  const passing=Math.sin(Math.PI*t);
-  return {
-    scaleX: 1.2+passing*.24,
-    scaleY: .74+passing*.13,
-    opacity: .40+passing*.22,
-    offsetX: 8+passing*5,
-    offsetY: 21+passing*7
   };
 }
 function modelFor(value) {
@@ -290,73 +275,33 @@ function airportLabel(flight, options) {
   if (destination) return "Nach: " + destination;
   return "";
 }
-function homeCoordinates(hass) {
-  const zone = hass?.states?.["zone.home"]?.attributes;
-  const latitude = numberOrNull(zone?.latitude) ?? numberOrNull(hass?.config?.latitude);
-  const longitude = numberOrNull(zone?.longitude) ?? numberOrNull(hass?.config?.longitude);
-  if (latitude === null || longitude === null || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
-  return { latitude, longitude };
-}
-// Convert WGS84 near home into local east/north metres, then rotate by the
-// freely configurable compass bearing at the top of the dashboard.
-function relativePixels(latitude, longitude, home, bearing, metresPerPixel, width, height) {
-  const latDifference = latitude - home.latitude;
-  const lonDifference = ((longitude - home.longitude + 540) % 360) - 180;
-  const east = lonDifference * METERS_PER_DEGREE * Math.cos(home.latitude * Math.PI / 180);
-  const north = latDifference * METERS_PER_DEGREE;
-  const radians = degrees(bearing) * Math.PI / 180;
-  return {
-    x: width / 2 + (east * Math.cos(radians) - north * Math.sin(radians)) / metresPerPixel,
-    y: height / 2 - (east * Math.sin(radians) + north * Math.cos(radians)) / metresPerPixel
-  };
-}
-// Predict the ray/viewport intersection from FR24 entry position, heading and
-// ground speed. Return null when the aircraft will not cross the screen.
-// The timer begins at the first offscreen point and ends after the far edge.
-function predictFlyover(width, height, shipSize, flight, home, settings) {
-  if (!home || flight.latitude === null || flight.longitude === null || flight.heading === null) return null;
-  if (Math.abs(flight.latitude) > 90 || Math.abs(flight.longitude) > 180) return null;
+// A simple centred pass. Compass bearings are measured clockwise from north.
+function flyoverPath(width, height, shipSize, heading, bearing, direction) {
   width = Math.max(1, width);
   height = Math.max(1, height);
-  const metresPerPixel = settings.screen_short_edge_meters / Math.min(width, height);
-  const bearing = settings.screen_top_bearing;
-  const start = relativePixels(flight.latitude, flight.longitude, home, bearing, metresPerPixel, width, height);
-  const angle = settings.direction === "left" ? 270 : settings.direction === "right" ? 90
-    : degrees(flight.heading - bearing);
-  const rad = angle * Math.PI / 180;
-  const dx = Math.sin(rad);
-  const dy = -Math.cos(rad);
-  const padding = Math.max(140, shipSize * 0.65);
-  let enters = -Infinity;
-  let leaves = Infinity;
-  for (const [position, direction, extent] of [
-    [start.x, dx, width],
-    [start.y, dy, height]
-  ]) {
-    if (Math.abs(direction) < 1e-10) {
-      if (position < -padding || position > extent + padding) return null;
-      continue;
-    }
-    const a = (-padding - position) / direction;
-    const b = (extent + padding - position) / direction;
-    enters = Math.max(enters, Math.min(a, b));
-    leaves = Math.min(leaves, Math.max(a, b));
-  }
-  if (leaves <= Math.max(0, enters)) return null;
-  const entrance = Math.max(0, enters);
-  const speedMetresPerSecond = flight.groundSpeed && flight.groundSpeed > 0
-    ? flight.groundSpeed * KNOT_TO_METERS_PER_SECOND
-    : settings.default_speed_kmh / 3.6;
-  const millisecondsPerPixel = metresPerPixel / speedMetresPerSecond * 1000;
+  const angle = direction === "left" ? 270 : direction === "right" ? 90
+    : degrees((heading ?? 90) - bearing);
+  const radians = angle * Math.PI / 180;
+  const dx = Math.sin(radians);
+  const dy = -Math.cos(radians);
+  const reach = Math.min(
+    Math.abs(dx) < 1e-10 ? Infinity : width / (2 * Math.abs(dx)),
+    Math.abs(dy) < 1e-10 ? Infinity : height / (2 * Math.abs(dy))
+  );
+  const radius = reach + Math.max(190, shipSize * .95);
   return {
-    startX: start.x + dx * entrance,
-    startY: start.y + dy * entrance,
-    endX: start.x + dx * leaves,
-    endY: start.y + dy * leaves,
     dx, dy,
-    delayMs: entrance * millisecondsPerPixel,
-    durationMs: (leaves - entrance) * millisecondsPerPixel,
-    speedMetresPerSecond
+    startX: width/2 - dx*radius,
+    startY: height/2 - dy*radius,
+    endX: width/2 + dx*radius,
+    endY: height/2 + dy*radius
+  };
+}
+function flightPosition(plan, progress) {
+  const t=Math.max(0,Math.min(1,progress));
+  return {
+    x: plan.startX+(plan.endX-plan.startX)*t,
+    y: plan.startY+(plan.endY-plan.startY)*t
   };
 }
 class FlightFlyoverCard extends HTMLElement {
@@ -370,11 +315,11 @@ class FlightFlyoverCard extends HTMLElement {
     this._subscriptionPending = false;
     this._subscriptionVersion = 0;
     this._layer = null;
-    this._pending = new Map();
     this._active = new Map();
     this._seen = new Map();
     this._modelPromises = new Map();
     this._threePromise = null;
+    this._trailCounter = 0;
   }
   setConfig(config) {
     if (!config || typeof config !== "object") throw Error("Card configuration is required");
@@ -396,8 +341,6 @@ class FlightFlyoverCard extends HTMLElement {
   }
   disconnectedCallback() {
     this._detachEvents();
-    for (const { timer } of this._pending.values()) clearTimeout(timer);
-    this._pending.clear();
     for (const id of [...this._active.keys()]) this._removeActive(id);
     this._seen.clear();
     this._layer?.remove();
@@ -428,38 +371,23 @@ class FlightFlyoverCard extends HTMLElement {
       this._subscription = null;
     }
   }
-  _receive(data, timeFired) {
+  _receive(data) {
     if (!this.isConnected) return;
     const flight = describe(data);
-    const home = homeCoordinates(this._hass);
-    const plan = predictFlyover(
-      window.innerWidth, window.innerHeight, this._config.size,
-      flight, home, this._config
-    );
-    if (!plan) return; // No valid position/heading or the predicted trajectory misses home.
-    const id = flight.id || [
-      flight.latitude, flight.longitude, flight.heading, flight.number
-    ].join(":");
+    const id = flight.id || [flight.number, flight.model].join(":");
     const now = Date.now();
     for (const [key, timestamp] of this._seen) {
       if (now - timestamp > 15 * 60 * 1000) this._seen.delete(key);
     }
-    if (this._seen.has(id) || this._pending.has(id) || this._active.has(id)) return;
-    const parsedTimestamp = timeFired ? Date.parse(timeFired) : NaN;
-    const ageMs = Number.isFinite(parsedTimestamp) ? Math.max(0, now - parsedTimestamp) : 0;
-    const firstVisible = now + plan.delayMs - ageMs;
-    const lastVisible = firstVisible + plan.durationMs;
-    if (lastVisible <= now) return; // Flight already passed while the event was delayed.
+    if (this._seen.has(id) || this._active.has(id)) return;
     this._seen.set(id, now);
-    const entry = { id, flight, plan, startAt: firstVisible, endAt: lastVisible, timer: null };
-    // Preload the small GLB while the aircraft is approaching, without
-    // allocating any WebGL resources until the visible animation begins.
-    void this._getModel(flight.model).catch(() => {});
-    entry.timer = setTimeout(() => {
-      this._pending.delete(id);
-      void this._begin(entry);
-    }, Math.max(0, firstVisible - now));
-    this._pending.set(id, entry);
+    const plan = flyoverPath(
+      window.innerWidth, window.innerHeight, this._config.size,
+      flight.heading, this._config.screen_top_bearing, this._config.direction
+    );
+    // No GPS/screen-distance prediction or cooldown. Every new entry starts
+    // one smooth pass, lasting the configured number of seconds.
+    void this._begin({ id, flight, plan, durationMs: this._config.duration * 1000 });
   }
   _ensureLayer() {
     if (this._layer) return this._layer;
