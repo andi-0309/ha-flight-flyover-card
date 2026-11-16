@@ -22,10 +22,10 @@ const context = {
   document: { createElement(tag) { return { tag }; } }
 };
 vm.runInNewContext(source + "\n globalThis.exportsForTests = {" +
-  "modelFor,describe,displayAirport,airportLabel,configOf,homeCoordinates," +
+  "modelFor,modelCandidates,normalizeNose,shadowVisuals,describe,displayAirport,airportLabel,configOf,homeCoordinates," +
   "predictFlyover,relativePixels,aircraftYawForScreen,flyoverVisuals,FlightFlyoverCard,FlightFlyoverEditor};", context);
 const {
-  modelFor, describe, displayAirport, airportLabel, configOf, homeCoordinates,
+  modelFor, modelCandidates, normalizeNose, shadowVisuals, describe, displayAirport, airportLabel, configOf, homeCoordinates,
   predictFlyover, relativePixels, aircraftYawForScreen, flyoverVisuals, FlightFlyoverCard, FlightFlyoverEditor
 } = context.exportsForTests;
 
@@ -55,7 +55,7 @@ test("ICAO aircraft model families match the supported 3D models", () => {
     B738: "B737", B38M: "B737", B739: "B737",
     B789: "B787", B78X: "B787"
   })) assert.equal(modelFor(code), expected);
-  assert.equal(modelFor("E190"), "A320");
+  assert.equal(modelFor("E190"), "E190");
 });
 
 test("FR24 speed, coordinates, heading, flight ID and airport metadata are parsed", () => {
@@ -263,4 +263,97 @@ test("animation is rendered from one camera and uses lightweight three-point lig
   assert.match(source,/const rimLight = new THREE\.DirectionalLight/);
   assert.match(source,/visual\.distance \* Math\.sin\(visual\.elevation\)/);
   assert.match(source,/aircraftYawForScreen\(entry\.plan\.dx, entry\.plan\.dy, visual\.tiltScale\)/);
+});
+
+test("Boeing 747, 777 and 767 variants select true matching aircraft meshes", () => {
+  const models = {
+    B748:"B748", "747-8":"B748", "B744":"B744", "747-400":"B744",
+    B772:"B772", B77L:"B772", "777-200":"B772", B773:"B773",
+    "777-300":"B773", B77W:"B777", "B777":"B777",
+    B763:"B763", B764:"B764", B752:"B752",
+    "787-9":"B787", B789:"B787", B738:"B737", "737-800":"B737"
+  };
+  for (const [icao, expected] of Object.entries(models))
+    assert.equal(modelFor(icao),expected,icao);
+  const b748=modelCandidates("B748");
+  assert.match(b748[0].url,/\/b748\.glb$/);
+  const b772=modelCandidates("B772");
+  assert.match(b772[0].url,/\/b772\.glb$/);
+  const b777=modelCandidates("B777");
+  assert.ok(b777.some(item=>item.url.includes("ac_b77w")));
+});
+
+test("A330 family, regional Embraer E-Jets, ATR and A220 have distinct 3D models", () => {
+  const models={
+    A332:"A332", A333:"A330", A339:"A330", A340:"A340",
+    BCS3:"A220", A220:"A220", E170:"E170", E175:"E170",
+    E190:"E190", E195:"E195", E290:"E190", E295:"E195",
+    ERJ145:"E145", CRJ900:"CRJ9", AT72:"ATR72", ATR42:"ATR42",
+    DH8D:"DH8D", B461:"BAE146"
+  };
+  for(const [icao, expected] of Object.entries(models))
+    assert.equal(modelFor(icao),expected,icao);
+  assert.ok(modelCandidates("A330").some(x=>x.url.includes("ac_a333")));
+  assert.ok(modelCandidates("E190").some(x=>x.url.includes("ac_e190")));
+  assert.ok(modelCandidates("E195").some(x=>x.url.includes("ac_e195")));
+  assert.ok(modelCandidates("E170").some(x=>x.url.endsWith("/e170.glb")));
+});
+
+test("common general-aviation aircraft map to their own light-aircraft 3D assets", () => {
+  const models={
+    C172:"C172", C152:"C172", C182:"C182", C208:"C208",
+    P28A:"PA28", PA28:"PA28", PA18:"PA18",
+    DR400:"DR40", DA42:"DA42", DA62:"DA42",
+    BE58:"C310", BE20:"BE20", C42:"FK9",
+    ASK21:"GLIDER", C510:"CITATION", CL60:"CL60", GLF6:"LEGACY"
+  };
+  for(const [icao, expected] of Object.entries(models))
+    assert.equal(modelFor(icao),expected,icao);
+  for(const type of ["C172","C182","C208","PA28","PA18","DA42","BE20","CITATION"]){
+    const urls=modelCandidates(type);
+    assert.ok(urls.length>0,type);
+    assert.ok(urls.some(x=>x.url.endsWith(".glb")),type);
+    assert.notEqual(urls[0].url,modelCandidates("A320")[0].url,type);
+  }
+});
+
+test("source-specific model axes normalize to +X forward", () => {
+  // Rotating each original nose about Y should yield +X.
+  const dirs={"+X":[1,0],"-X":[-1,0],"+Z":[0,1],"-Z":[0,-1]};
+  for(const [axis,[x,z]] of Object.entries(dirs)){
+    const yaw=normalizeNose(axis);
+    const xPrime=x*Math.cos(yaw)+z*Math.sin(yaw);
+    const zPrime=-x*Math.sin(yaw)+z*Math.cos(yaw);
+    assert.ok(Math.abs(xPrime-1)<1e-10,axis);
+    assert.ok(Math.abs(zPrime)<1e-10,axis);
+  }
+  assert.equal(modelCandidates("C172")[0].forward,"-Z");
+  assert.equal(modelCandidates("A320")[0].forward,"+X");
+});
+
+test("large soft aircraft shadow grows and settles smoothly", () => {
+  const approach=shadowVisuals(0);
+  const centre=shadowVisuals(.5);
+  const departure=shadowVisuals(1);
+  assert.ok(centre.scaleX>approach.scaleX);
+  assert.ok(centre.scaleY>approach.scaleY);
+  assert.ok(centre.opacity>approach.opacity);
+  assert.ok(Math.abs(approach.scaleX-departure.scaleX)<1e-10);
+  const source=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(source,/margin-top:-42px/);
+  assert.match(source,/\.ff-shadow\{/);
+  assert.match(source,/background:radial-gradient/);
+  assert.match(source,/context\.shadow\.style\.transform/);
+});
+
+test("the exact event code B748 displays a 747-8 model, not an Airbus approximation", () => {
+  const flight=describe({
+    id:"demo-flight-014",flight_number:"LH123",aircraft_code:"B748",
+    airport_origin_code_iata:"FRA",airport_destination_code_iata:"MUC",
+    latitude:48.5622840980134,longitude:10.921010971069336,
+    heading:111,ground_speed:400
+  });
+  assert.equal(flight.model,"B748");
+  assert.ok(modelCandidates(flight.model)[0].url.endsWith("/b748.glb"));
+  assert.equal(flight.heading,111);
 });
