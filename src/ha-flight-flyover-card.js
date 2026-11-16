@@ -4,7 +4,88 @@ const EDITOR_TAG = "ha-flight-flyover-card-editor";
 const EVENT = "flightradar24_entry";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-const MODEL_URL = "https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/";
+// Lightweight FlightGear-derived GPL-2.0 assets from a pinned Skytrails release.
+// Third-party models are loaded on demand and remain under their source licenses.
+const SKYTRAILS_BASE = "https://github.com/stagworksde/skytrails-aircraft-models/releases/download/v0.1.0/";
+const FR24_BASE = "https://raw.githubusercontent.com/Flightradar24/fr24-3d-models/master/models/";
+const AMVLAB_BASE = "https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/";
+const CC_BY_BASE = "https://raw.githubusercontent.com/WorldPixelMap/android-gods-eye-view/main/public/models/";
+const SKYTRAILS_MODELS = Object.freeze({
+  "A220": "ac_a220-22f0e703.glb",
+  "A333": "ac_a333-d59fae4d.glb",
+  "A343": "ac_a343-bb1d7bce.glb",
+  "B738": "ac_b738-063d2826.glb",
+  "B744": "ac_b744-4c4cdb88.glb",
+  "B752": "ac_b752-629a0073.glb",
+  "B77W": "ac_b77w-4e801325.glb",
+  "E190": "ac_e190-49a4dc4e.glb",
+  "E195": "ac_e195-83ed49c6.glb",
+  "E145": "ac_e145-922b26a0.glb",
+  "C172": "ac_c172-91309060.glb",
+  "C182": "ac_c182-63ade89e.glb",
+  "C208": "ac_c208-e2deca58.glb",
+  "C310": "ac_c310-34baaf35.glb",
+  "PA28": "ac_pa28-e19c0d07.glb",
+  "PA18": "ac_pa18-8a11c283.glb",
+  "DR40": "ac_dr40-a66cc59c.glb",
+  "DA42": "ac_da42-5a7d0322.glb",
+  "BE20": "ac_be20-fddbf056.glb",
+  "FK9": "ac_fk9-a16762bf.glb",
+  "CENTRAIR101": "ac_centrair101-1ea60baf.glb",
+  "C550": "ac_c550-7b883b05.glb",
+  "CL60": "ac_cl60-e5f72c0f.glb",
+  "LEGACY": "ac_legacy-87aa025e.glb",
+  "AT72": "ac_at72-d844cba3.glb",
+  "DH8C": "ac_dh8c-95e6aeb4.glb",
+  "DH8D": "ac_dh8d-226868a6.glb",
+  "CRJ2": "ac_crj2-a760fdf0.glb",
+  "CRJ7": "ac_crj7-6f1b898b.glb",
+  "SF34": "ac_sf34-38730202.glb"
+});
+// FR24 GPL-2.0 assets include several valuable subtypes absent from Skytrails.
+const FR24_MODELS = Object.freeze({
+  B748: "b748.glb", B772: "b772.glb", B773: "b773.glb",
+  B763: "b763.glb", B764: "b764.glb", A332: "a332.glb",
+  E170: "e170.glb", CRJ9: "crj900.glb",
+  ATR42: "atr42.glb", BAE146: "bae146.glb",
+  HELI: "heli.glb", CITATION: "citation.glb",
+  ASK21: "ask21.glb"
+});
+const AMVLAB_MODELS = new Set(["A320","A350","A380","B737","B787"]);
+const SKY_ALIASES = Object.freeze({
+  A220:"A220", A330:"A333", A340:"A343",
+  B744:"B744", B747:"B744", B752:"B752", B777:"B77W",
+  E190:"E190", E195:"E195", E145:"E145",
+  C172:"C172", C182:"C182", C208:"C208", C310:"C310",
+  PA28:"PA28", PA18:"PA18", DR40:"DR40", DA42:"DA42",
+  BE20:"BE20", FK9:"FK9", GLIDER:"CENTRAIR101",
+  CITATION:"C550", CL60:"CL60", LEGACY:"LEGACY",
+  ATR72:"AT72", DH8C:"DH8C", DH8D:"DH8D",
+  CRJ2:"CRJ2", CRJ7:"CRJ7", SF34:"SF34", B738:"B738"
+});
+function normalizeNose(angle) {
+  // All third-party GLBs are rotated onto our +X-forward convention so that
+  // aircraftYawForScreen() keeps the nose pointed along the actual flight path.
+  return ({"+X":0,"-Z":-Math.PI/2,"-X":Math.PI,"+Z":Math.PI/2})[angle] ?? 0;
+}
+function modelCandidates(type) {
+  const paths=[];
+  const add=(url,forward)=>{if(!paths.some(x=>x.url===url))paths.push({url,forward});};
+  if (AMVLAB_MODELS.has(type)) add(AMVLAB_BASE+type+"_nologo.glb","+X");
+  if (FR24_MODELS[type]) add(FR24_BASE+FR24_MODELS[type],"+X");
+  const sky=SKY_ALIASES[type]||type;
+  if (SKYTRAILS_MODELS[sky]) add(SKYTRAILS_BASE+SKYTRAILS_MODELS[sky],"-Z");
+  // Correctly licensed CC BY 4.0 alternative for the ubiquitous Cessna 172.
+  if(type==="C172")add(CC_BY_BASE+"c172.glb","-X");
+  if(type==="HELI")add(CC_BY_BASE+"bell206.glb","-X");
+  // Type-appropriate fallbacks on failed downloads or unreachable release URLs.
+  if(type.startsWith("E"))add(FR24_BASE+"e190.glb","+X");
+  if(["C172","C182","C208","PA18","DR40","DA42","BE20","FK9","GLIDER"].includes(type))
+    add(FR24_BASE+"pa28.glb","+X");
+  if(type.startsWith("B7") && !AMVLAB_MODELS.has(type))add(AMVLAB_BASE+"B787_nologo.glb","+X");
+  if(type!=="A320")add(AMVLAB_BASE+"A320_nologo.glb","+X");
+  return paths;
+}
 const KNOT_TO_METERS_PER_SECOND = 1852 / 3600;
 const METERS_PER_DEGREE = 111320;
 const MAX_ACTIVE = 3; // Protect low-power kiosk GPUs from too many WebGL contexts.
@@ -92,12 +173,59 @@ function flyoverVisuals(progress) {
   };
 }
 function modelFor(value) {
-  const code = textValue(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (/^(A318|A319|A320|A321|A20N|A21N|A19N)/.test(code)) return "A320";
-  if (/^(A35|A359|A35K)/.test(code)) return "A350";
-  if (/^(A38|A388)/.test(code)) return "A380";
-  if (/^(B73|B38|B39|B3M)/.test(code)) return "B737";
-  if (/^(B78|B787)/.test(code)) return "B787";
+  const c=textValue(value).toUpperCase().replace(/[^A-Z0-9]/g,"");
+  // Airbus: nearest matching real airframe when the exact variant is absent.
+  if(/^(A220|A221|A223|BCS1|BCS3|CS100|CS300)/.test(c))return "A220";
+  if(/^(A318|A319|A320|A321|A19N|A20N|A21N|A32N)/.test(c))return "A320";
+  if(/^(A332|A330200|330200)/.test(c))return "A332";
+  if(/^(A330|A333|A338|A339|330300|330900)/.test(c))return "A330";
+  if(/^(A340|A342|A343|A345|A346)/.test(c))return "A340";
+  if(/^(A350|A359|A35K)/.test(c))return "A350";
+  if(/^(A380|A388)/.test(c))return "A380";
+  // Boeing 747-8 and 777 variants get their own meshes, not generic widebodies.
+  if(/^(B748|7478|747800|7478I|7478F)/.test(c))return "B748";
+  if(/^(B747|B742|B743|B744|747200|747300|747400)/.test(c))return "B744";
+  if(/^(B772|B77L|777200)/.test(c))return "B772";
+  if(/^(B773|777300)/.test(c))return "B773";
+  if(/^(B777|B77W|B77F|B778|B779|7778|7779)/.test(c))return "B777";
+  if(/^(B788|B789|B78X|B787|7878|7879|78710)/.test(c))return "B787";
+  if(/^(B752|B757|757200)/.test(c))return "B752";
+  if(/^(B753|757300)/.test(c))return "B752";
+  if(/^(B763|B767|767300)/.test(c))return "B763";
+  if(/^(B764|767400)/.test(c))return "B764";
+  if(/^(B762|767200)/.test(c))return "B763";
+  if(/^(B736|B737|B738|B739|B38M|B39M|B3XM|B3M8|B3M9|737)/.test(c))return "B737";
+  // Embraer: E-Jet/E2 and the smaller ERJ family.
+  if(/^(E170|E175|E75L|E75S|E17)/.test(c))return "E170";
+  if(/^(E195|E295|E95|EMB195)/.test(c))return "E195";
+  if(/^(E190|E290|E190E2|E90)/.test(c))return "E190";
+  if(/^(E135|E140|E145|ERJ|ER4|EMB145)/.test(c))return "E145";
+  // Turboprops, commuter and regional jets.
+  if(/^(AT42|ATR42)/.test(c))return "ATR42";
+  if(/^(AT72|ATR72|ATR7)/.test(c))return "ATR72";
+  if(/^(DH8D|Q400|DHC8Q400)/.test(c))return "DH8D";
+  if(/^(DH8|D228|D328)/.test(c))return "DH8C";
+  if(/^(CRJ9|CRJX|CRJ900|CRJ1000)/.test(c))return "CRJ9";
+  if(/^(CRJ7|CRJ700)/.test(c))return "CRJ7";
+  if(/^(CRJ2|CRJ1|CRJ200|CRJ100)/.test(c))return "CRJ2";
+  if(/^(BAE146|B461|B462|B463|RJ70|RJ85|RJ100)/.test(c))return "BAE146";
+  if(/^(SF34|SF340|SB20)/.test(c))return "SF34";
+  // Common single/twin piston aircraft, turboprops, light jets and gliders.
+  if(/^(C150|C152|C172|C17|CESSNA172)/.test(c))return "C172";
+  if(/^(C182|C180|C185)/.test(c))return "C182";
+  if(/^(C208|C208B|C206|C210)/.test(c))return "C208";
+  if(/^(PA28|P28A|P28R|PA32|PA46|SR20|SR22|DA40|DV20|P2002|P2008|BE36|TBM9|PC12)/.test(c))return "PA28";
+  if(/^(PA18|PA12|PA11|J3|PIPERCUB)/.test(c))return "PA18";
+  if(/^(DR40|DR400|DR300)/.test(c))return "DR40";
+  if(/^(DA42|DA62|PA34|P34|BE76)/.test(c))return "DA42";
+  if(/^(C310|C340|BE58|BE55)/.test(c))return "C310";
+  if(/^(BE20|B200|BE30|BE35|B350|BE9L)/.test(c))return "BE20";
+  if(/^(FK9|C42|P92|ULAC|ULM|VL3|WT9)/.test(c))return "FK9";
+  if(/^(AS21|ASK21|DUOD|DISC|SF25|GLID|S10S)/.test(c))return "GLIDER";
+  if(/^(C510|C525|C550|C560|C56X|C680|E50P|E55P|CIT|PC24|LJ45|LJ35)/.test(c))return "CITATION";
+  if(/^(CL60|CL30|G280|F900|FA7X)/.test(c))return "CL60";
+  if(/^(GLEX|GLF4|GLF5|GLF6|G650|G700|LEGACY)/.test(c))return "LEGACY";
+  if(/^(EC35|H135|EC45|H145|R22|R44|R66|B06|B407|HELI|AS35)/.test(c))return "HELI";
   return "A320";
 }
 function describe(raw) {
@@ -339,16 +467,27 @@ class FlightFlyoverCard extends HTMLElement {
     if (!this._modelPromises.has(name)) {
       const promise = this._getThree().then(async ({ THREE, GLTFLoader }) => {
         const loader = new GLTFLoader();
-        const result = await loader.loadAsync(MODEL_URL + name + "_nologo.glb");
-        const scene = result.scene;
-        const box = new THREE.Box3().setFromObject(scene);
-        const center = box.getCenter(new THREE.Vector3());
-        const length = box.getSize(new THREE.Vector3()).length();
-        if (!Number.isFinite(length) || length <= 0) throw Error("Invalid GLB aircraft");
-        const scale = 4.5 / length;
-        scene.scale.setScalar(scale);
-        scene.position.copy(center).multiplyScalar(-scale);
-        return scene;
+        let lastError;
+        for(const candidate of modelCandidates(name)){
+          try {
+            const result=await loader.loadAsync(candidate.url);
+            const scene=new THREE.Group();
+            result.scene.rotation.y=normalizeNose(candidate.forward);
+            scene.add(result.scene);
+            scene.updateMatrixWorld(true);
+            const bounds=new THREE.Box3().setFromObject(scene);
+            const center=bounds.getCenter(new THREE.Vector3());
+            const length=bounds.getSize(new THREE.Vector3()).length();
+            if (!Number.isFinite(length) || length <= 0) throw Error("Invalid GLB aircraft");
+            const scale=4.5/length;
+            scene.scale.setScalar(scale);
+            scene.position.copy(center).multiplyScalar(-scale);
+            return scene;
+          } catch(error) {
+            lastError=error;
+          }
+        }
+        throw lastError ?? new Error("No aircraft model sources configured");
       }).catch((error) => { this._modelPromises.delete(name); throw error; });
       this._modelPromises.set(name, promise);
     }
