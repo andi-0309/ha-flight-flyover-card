@@ -85,7 +85,7 @@ heading: 90
 ground_speed: 400
 ```
 
-This should display a 3D A380 moving right across the whole screen, labelled `LH123` and `FRA → MUC`. At the default scale, the duration is calculated from `400` knots and the 1,000-metre short edge. Change `screen_top_bearing` to `180` to reverse the apparent direction of a northbound test flight. To test another flyover, change the `id` (or wait 10 minutes). Avoid using this test while production flight entries are running, because the card queues up to three events.
+This should display a 3D A380 moving **diagonally upward to the right** if you use the `screen_top_bearing: 37.5` example, labelled `LH123` and `FRA → MUC`. At the default scale, its duration is calculated from `400` knots and the 1,000-metre short edge. For a purely horizontal flight at `heading: 90`, set `screen_top_bearing: 0`; any other numeric angle also works. To test another flyover, change the `id` (or wait 10 minutes). Avoid using this test while production flight entries are running, because the card queues up to three events.
 
 ## Automatic updates in the Marketplace
 
