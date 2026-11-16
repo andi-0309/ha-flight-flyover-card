@@ -1,121 +1,97 @@
 # HA Flight Flyover Card
 
-A Home Assistant Lovelace custom card (MVP): when the [Flightradar24 integration](https://github.com/AlexandrErohin/home-assistant-flightradar24) fires a `flightradar24_entry` event, a 3D aircraft flies **above all other cards** on the current dashboard. Flight number and origin/destination appear underneath.
+A lightweight Home Assistant dashboard card that shows **realistic 3D aircraft across the entire dashboard** when a Flightradar24 flight is predicted to cross the area represented by your screen.
 
-## MVP status
+**[Installation auf Deutsch](INSTALLATION_DE.md)** · **[GitHub releases](https://github.com/andi-0309/ha-flight-flyover-card/releases)**
 
-- WebSocket subscription to the actual `flightradar24_entry` event; no automation needed.
-- Transparent, click-through, fixed viewport overlay appended to `document.body`; the card itself occupies zero height.
-- Real 3D GLB models for A320 family, A350, A380, B737 family, B787 family (ICAO aircraft codes mapped to nearest supported family).
-- Other aircraft currently use an **A320 approximation**, not an exact model. If a GLB download fails, a simple procedural aircraft is shown.
-- Frame rate capped at 20 FPS by default, pixel ratio 1, no animation/rendering when idle.
-- Compass-accurate on-screen movement using FR24 `heading` and a configurable north orientation.
-- Realistic transit timing from FR24 `ground_speed` (knots) and the configured real-world length of the display's short edge.
-- Default speed of **200 km/h** when FR24 reports no valid ground speed; no fixed fallback animation duration.
-- Configurable cooldown, airplane size and information labels.
-- **Online requirement:** first use loads the Three.js runtime from esm.sh and the specific GLB file from raw.githubusercontent.com. These are external services; the card will not render a detailed model offline. The assets can be self-hosted via `model_source`, but Three.js still needs the CDN in this version.
+## Features
 
-## Installation
+- Watches the Home Assistant event `flightradar24_entry` from the [Flightradar24 custom integration](https://github.com/AlexandrErohin/home-assistant-flightradar24). No HA automation is required.
+- Reads the aircraft's latitude, longitude, course and ground speed. Uses your Home Assistant **Home zone coordinates** (with HA configuration as a fallback) to predict whether the flight trajectory crosses the **mapped dashboard viewport**.
+- Schedules the flyover to start when the aircraft would reach the viewport, not when it merely enters the monitored FR24 region. **No cooldown or fixed flight duration.** If FR24 speed is missing, uses **200 km/h** by default. Actual flight timing follows distance / ground speed.
+- Compass orientation can be any degree value: `screen_top_bearing: 37.5` means the top edge of the display points to 37.5° clockwise from north.
+- Origin and destination airports can each be enabled independently. Show **IATA/ICAO code**, **full name**, or **both**.
+- **Visual Lovelace editor:** configure the card in Home Assistant's graphical dashboard editor, no manual YAML needed.
+- Transparent, click-through `document.body` overlay above *all dashboard cards*.
+- Five compact GLB model families: A320, A350, A380, B737 and B787. Other aircraft use an approximate A320 model. Three.js and a model are loaded only when needed.
+- Optimized for kiosk displays: maximum 20 FPS by default, pixel ratio 1; at most three concurrent WebGL aircraft. Multiple flights can overlap, but further simultaneous flights are skipped to protect low-power hardware.
 
-### Home Assistant Marketplace (2026.11+)
+### Limitations
 
-1. Install the [Flightradar24 integration](https://github.com/AlexandrErohin/home-assistant-flightradar24) through **Settings → Marketplace** and configure the area around your home. You should receive `flightradar24_entry` events under Developer Tools → Events.
-2. Open **Settings → Marketplace → Add from link**. Paste `https://github.com/andi-0309/ha-flight-flyover-card`. Connect your GitHub account when prompted; this is required for custom repositories and update checks. If asked, choose **Dashboard** as the repository type.
-3. Open the new **Flight Flyover Card** entry and select **Install**.
-4. The Marketplace usually registers `/local/community/ha-flight-flyover-card/ha-flight-flyover-card.js` as a JavaScript **module** under dashboard resources. If resources are managed in YAML, add it manually instead.
-5. Reload the dashboard browser after installing or updating the card.
-5. Add **one** manual custom card to the dashboard:
+The trajectory is a **prediction** based on one FR24 entry snapshot. The card does not follow course changes or speed changes after the event. It projects the flight onto a flat local map around your Home zone. It is not a live radar display or a guarantee the aircraft will actually pass overhead. **Events without position or heading are ignored** because a geographic flyover cannot be predicted. An aircraft may be visible when it crosses the configured screen footprint without passing exactly over the point representing your house.
+
+The first animation needs network access to `esm.sh` (Three.js) and `raw.githubusercontent.com` (3D models). On load failure, a simple plane symbol is animated instead. GPU performance on Raspberry Pi 3B+ should be checked on the target device.
+
+## Installation (Home Assistant Marketplace, 2026.11+)
+
+1. Install and configure [Flightradar24](https://github.com/AlexandrErohin/home-assistant-flightradar24) in **Settings → Marketplace** and **Settings → Devices & services**. Choose a detection area around your house. Confirm that the event type `flightradar24_entry` appears in **Developer Tools → Events**.
+2. Go to **Settings → Marketplace → Add from link** and enter `https://github.com/andi-0309/ha-flight-flyover-card`. Connect GitHub if the Marketplace requests it, then install the **Dashboard** repository.
+3. The Marketplace registers the JavaScript module, usually at `/local/community/ha-flight-flyover-card/ha-flight-flyover-card.js`. If your resources are managed in YAML, follow the Marketplace instructions to add it as a JavaScript module.
+4. Reload your dashboard. Open **Edit dashboard → Add card**, select **Flight Flyover** and configure it with the **graphical editor**. Add **one card per view** where you want flyovers. The card takes up no visible dashboard space.
+
+### Optional manual YAML configuration
 
 ```yaml
 type: custom:ha-flight-flyover-card
 screen_short_edge_meters: 1000
 screen_top_bearing: 37.5
-direction: heading
 default_speed_kmh: 200
-cooldown: 30
+direction: heading
+show_flight_number: true
+show_origin_airport: true
+show_destination_airport: true
+airport_format: both
 max_fps: 20
 size: 330
-show_flight_number: true
-show_route: true
 ```
 
-The card deliberately has no visible body. The feature is automatically activated whenever the view is open; there is no separate automation or entity required. It can be placed anywhere on that view. The overlay covers the **entire Home Assistant browser viewport**, including other Lovelace cards, and does not capture clicks. It does not overlay other OS applications or browser windows. The element is removed when its dashboard view is unloaded.
+All properties are configurable in the graphical editor:
 
-### Manual installation
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `screen_short_edge_meters` | `1000` | Metres represented by the dashboard viewport's shorter edge. |
+| `screen_top_bearing` | `0` | **Any compass angle in degrees** at the top of the display; clockwise from true north. |
+| `default_speed_kmh` | `200` | Substitute speed when `ground_speed` is missing or invalid. |
+| `direction` | `heading` | Use FR24 heading automatically, or override the motion with `left` or `right`. |
+| `show_flight_number` | `true` | Show flight number or callsign. |
+| `show_origin_airport` | `true` | Show departure airport. |
+| `show_destination_airport` | `true` | Show arrival airport. |
+| `airport_format` | `code` | `code`: IATA/ICAO abbreviation; `name`: full name; `both`: abbreviation + name. |
+| `max_fps` | `20` | Rendering frame-rate cap (1–30). |
+| `size` | `330` | Approximate aircraft image width in pixels (120–700). |
 
-Copy `dist/ha-flight-flyover-card.js` to `/config/www/ha-flight-flyover-card.js`. Add dashboard resource `/local/ha-flight-flyover-card.js` with type **JavaScript module**, then add the example card above.
+**Home position:** The card automatically reads `zone.home` coordinates or `hass.config.latitude/longitude`. The geographical centre is the Home zone, not the TV's physical location. A dashboard that is open in multiple browsers calculates the same geographic flyover with each browser's own aspect ratio.
 
-## Configuration
+## Test without waiting for a flight
 
-| Option | Default | Description |
-|---|---|---|
-| `screen_short_edge_meters` | `1000` | Real-world distance represented by the *shorter* dashboard viewport edge in metres (10–100000). |
-| `screen_top_bearing` | `0` | **Any numeric degree value** measured clockwise from north toward the top of the screen. Examples: `0`, `37.5`, `145`, `270`, `-15`. Values wrap around at 360°. |
-| `default_speed_kmh` | `200` | Speed in km/h used if FR24 `ground_speed` is missing, zero or invalid (20–1200 km/h). |
-| `cooldown` | `30` | Seconds between flyovers (0–3600). |
-| `max_fps` | `20` | Rendering FPS cap (1–30). |
-| `size` | `330` | Plane canvas width in pixels (120–700). |
-| `direction` | `heading` | `heading`: geographic direction from FR24 corrected by `screen_top_bearing`; `left` or `right`: manual horizontal overrides. |
-| `show_flight_number` | `true` | Display flight number or callsign. |
-| `show_route` | `true` | Display origin/destination when provided by FR24. |
-| `model_source` | AMVLab raw GitHub URL | Directory URL containing `A320_nologo.glb`, `A350_nologo.glb`, `A380_nologo.glb`, `B737_nologo.glb`, `B787_nologo.glb`. |
+1. In **Developer Tools → States**, look up `zone.home` and copy the latitude and longitude attributes.
+2. Open **Developer Tools → Events → Fire event** and enter the type `flightradar24_entry`.
+3. Paste the following data, **replacing the sample latitude and longitude with your own Home zone coordinates**:
 
-### Speed and direction calculation
-
-FR24 reports `ground_speed` in **knots** and `heading` as degrees clockwise from north. The card converts speed to metres per second (`knots × 1852 / 3600`). It projects the aircraft's heading onto the dashboard, taking `screen_top_bearing` into account. The entire viewport is interpreted as a rectangle of real-world dimensions: its **shorter edge** represents `screen_short_edge_meters`. Its longer dimension is scaled by the browser's aspect ratio.
-
-The aircraft travels along a line through the centre of that rectangle. The line intersects the actual screen borders; an extra margin is added at both ends so the aircraft enters and exits fully. The flyover duration is **distance divided by ground speed** (bounded to 1–120 seconds to avoid pathological cases). When FR24 provides no valid speed, the card assumes **200 km/h** (`default_speed_kmh`) and still calculates the duration from the geometric distance. There is no fixed-time fallback. The renderer runs at no more than `max_fps` during a flyover.
-
-`screen_top_bearing` is a **free compass angle in degrees**, not a simple north/south toggle. For example, `37.5` means the top of the display corresponds to a bearing 37.5° clockwise from true north. This describes an abstract view orientation (how geographic directions map to the screen); a TV's physical orientation alone does not determine the setting. This is a **centred animation**, not an exact trace of the aircraft's measured latitude/longitude over the house. In windy conditions, its reported heading may also differ slightly from actual ground track.
-
-## Testing without waiting for an aircraft
-
-Home Assistant → Developer Tools → Events → Fire event:
-
-**Event type:** `flightradar24_entry`
-
-**Event data:**
 ```yaml
-id: demo-001
+id: demo-flight-001
 flight_number: LH123
 aircraft_code: A388
 airport_origin_code_iata: FRA
+airport_origin_name: Frankfurt Airport
 airport_destination_code_iata: MUC
+airport_destination_name: Munich Airport
+latitude: 48.1351 # Replace with your zone.home latitude
+longitude: 11.5820 # Replace with your zone.home longitude
 heading: 90
 ground_speed: 400
 ```
 
-This should display a 3D A380 moving **diagonally upward to the right** if you use the `screen_top_bearing: 37.5` example, labelled `LH123` and `FRA → MUC`. At the default scale, its duration is calculated from `400` knots and the 1,000-metre short edge. For a purely horizontal flight at `heading: 90`, set `screen_top_bearing: 0`; any other numeric angle also works. To test another flyover, change the `id` (or wait 10 minutes). Avoid using this test while production flight entries are running, because the card queues up to three events.
+With coordinates exactly at `zone.home`, the animation begins near the screen centre because the flight is already over the mapped home position. For a full pass beginning offscreen, adjust the longitude slightly **west** of home when heading east. Give subsequent test events different `id` values; repeated aircraft IDs are suppressed for 15 minutes.
 
-## Automatic updates in the Marketplace
+## Marketplace update detection
 
-The repository publishes **numbered stable GitHub releases**, including the installable JavaScript artifact, after successful checks on `main` (see `.github/workflows/validate.yml`). The Home Assistant Marketplace uses these releases to determine available updates and creates an **update entity** for the installed repository.
+Home Assistant's **Marketplace detects new stable GitHub releases** and displays them in **Settings → Updates**. This repository publishes a GitHub release containing the installable `ha-flight-flyover-card.js` asset after automated CI checks on `main`. `hacs.json` is still the required Marketplace manifest filename. For custom repositories, connect GitHub in the Marketplace so Home Assistant can check for updates (typically every 48 hours).
 
-- Custom repositories need a GitHub connection in **Settings → Marketplace**. Their update checks run periodically (currently approximately **every 48 hours**). The Marketplace can install updates independently of the card.
-- When a newer release is available, it appears under **Settings → Updates**. Installing it updates the JavaScript file and resource URL. **Reload the dashboard browser** to use the new code.
-- If you want unattended installation, use [the optional automation](examples/marketplace-auto-update.yaml) with the *actual* update entity ID of your installed Flight Flyover Card. The Marketplace can automatically install via `update.install` when enabled. **The automation does not become active merely by installing the card.**
-- The `hacs.json` file remains mandatory metadata for the Marketplace despite its historical name; it is not a requirement to install the former HACS integration.
+**No Home Assistant update-installation automation is included or necessary.** Updates are detected and offered through Home Assistant itself; the user chooses whether to install them. Reload the dashboard browser after updating a frontend card.
 
-## Architecture and compatibility
+## Development & licensing
 
-This is a **Lovelace frontend card**, not a Home Assistant Python custom integration. It listens to the HA WebSocket and creates/removes a temporary `document.body` overlay. Install it on **each dashboard view** where you want flyovers. At most one card per view is recommended. Other browser tabs and other screens will receive their own animation if that dashboard view is loaded there.
+The Marketplace installs `dist/ha-flight-flyover-card.js`. Check the source with `node --check dist/ha-flight-flyover-card.js` and run tests with `node --test tests/*.test.cjs`. GitHub Actions runs both and publishes stable versioned releases on successful `main` pushes.
 
-The FR24 event data structure can change between integration versions. Flight codes are mapped from the `aircraft_code` attribute; callsigns and routes display only when the upstream integration supplies them.
-
-For Raspberry Pi 3B+ kiosk hardware, the default small canvas and 20 FPS target reduce GPU work, but actual performance depends on the operating system, browser, and available GPU/WebGL acceleration. Detailed GLB models render only while an aircraft is animating.
-
-## Licensing and attribution
-
-Card code is MIT licensed. 3D aircraft models are from [AMVLab aircraft-models](https://github.com/amvlab/aircraft-models), licensed **CC BY 4.0**. See [ATTRIBUTION.md](ATTRIBUTION.md). The models are fetched on demand, not bundled into the source repository. Three.js is licensed MIT and loaded from [esm.sh](https://esm.sh/).
-
-## Troubleshooting
-
-- **Nothing flies:** Check that the view contains the card and the FR24 integration fires `flightradar24_entry` under Developer Tools → Events. Send a manual test event as shown above. Reload the browser after installing a new version.
-- **Plane is a simple shape:** The GLB or Three.js CDN request failed. Check browser Developer Tools → Network and allow HTTPS requests to `esm.sh` and `raw.githubusercontent.com`.
-- **Wrong airplane variant:** Only five model families are included in the MVP; unsupported ICAO codes currently use A320 as a visual substitute. Exact subtypes and liveries are not yet supported.
-- **Not over another view:** Place the card in that view too. On a dedicated fullscreen kiosk, the overlay occupies the entire visible dashboard.
-- **Route missing:** FR24 may not expose origin/destination for every flight; the card leaves the route blank in that case.
-
-## Development
-
-The shipping entrypoint is `dist/ha-flight-flyover-card.js` (plain JavaScript module). To run the lightweight parser tests locally with Node.js 20+, use `node --check dist/ha-flight-flyover-card.js` and `node --test tests/*.test.cjs`. GitHub Actions validates each commit before publishing the next stable release. A live browser/HA integration test is still recommended.
+The card source is MIT licensed. The logo-free GLB models come from [AMVLab aircraft-models](https://github.com/amvlab/aircraft-models) and are CC BY 4.0. See [ATTRIBUTION.md](ATTRIBUTION.md). The model source is built into the card and cannot be changed in Lovelace settings.
