@@ -26,14 +26,28 @@ Dashboard bearbeiten → **Karte hinzufügen → Manuell**. Folgende YAML-Konfig
 
 ```yaml
 type: custom:ha-flight-flyover-card
+screen_short_edge_meters: 1000
+screen_top_bearing: 0
+direction: heading
 duration: 6000
 cooldown: 30
 max_fps: 20
 size: 330
-direction: heading
 show_flight_number: true
 show_route: true
 ```
+
+**Neue Einstellungen für maßstabsgetreue Bewegungen:**
+
+- `screen_short_edge_meters: 1000`: Die **kürzere Bildschirmkante** entspricht 1.000 Metern. Die längere Kante wird automatisch anhand des Seitenverhältnisses berechnet.
+- `screen_top_bearing: 0`: Norden liegt oben. `90` = Osten oben, `180` = Süden oben, `270` = Westen oben. Für einen südausgerichteten Bildschirm kannst du z. B. `180` einstellen.
+- `direction: heading`: Tatsächlicher Flugkurs aus FR24 bestimmt die Bewegung. Alternativ kann man mit `left` oder `right` eine feste horizontale Richtung erzwingen.
+- `duration: 6000`: Feste Animationsdauer als **Fallback**, wenn keine gültige Geschwindigkeit vorliegt. Mit `ground_speed` wird die Dauer automatisch berechnet.
+- `max_fps: 20`: GPU-Last auf einem Raspberry Pi begrenzen.
+
+Die Integration liefert `ground_speed` in **Knoten**. Die Karte rechnet intern `Knoten × 1852 / 3600` in Meter pro Sekunde um. Die dargestellte Linie läuft durch die Bildschirmmitte und verlängert sich an beiden Enden, damit das Flugzeug vollständig ins Bild hinein- und herausfliegt. Die Dauer ergibt sich aus Strecke ÷ Geschwindigkeit und liegt aus Sicherheitsgründen zwischen 1 und 120 Sekunden.
+
+Die Bewegung ist geografisch ausgerichtet, aber **keine exakte Abbildung der Flugzeugposition relativ zum Haus**: Der tatsächliche seitliche Abstand des Flugzeugs wird beim MVP nicht verwendet. Ein Kurs ist außerdem nicht immer identisch mit der tatsächlichen Richtung über Grund, beispielsweise bei Seitenwind.
 
 Die Karte nimmt selbst keinen sichtbaren Platz ein. Das Flugzeug fliegt als transparentes Overlay über **alle Karten der aktuellen Dashboard-Ansicht**. Andere Ansichten benötigen jeweils eine eigene Karteninstanz. Wir empfehlen nur eine Instanz pro Ansicht.
 
@@ -52,9 +66,10 @@ aircraft_code: A388
 airport_origin_code_iata: FRA
 airport_destination_code_iata: MUC
 heading: 90
+ground_speed: 400
 ```
 
-Es sollte ein A380 mit `LH123` und `FRA → MUC` über den Bildschirm fliegen. Für den nächsten Versuch die `id` verändern, da die Karte identische Flug-IDs für zehn Minuten unterdrückt.
+Es sollte ein A380 mit `LH123` und `FRA → MUC` über den Bildschirm fliegen. Mit `ground_speed: 400` Knoten ergibt sich die Flugdauer automatisch aus der Displaygröße. Für den nächsten Versuch die `id` verändern, da die Karte identische Flug-IDs für zehn Minuten unterdrückt.
 
 ## Hinweise
 
