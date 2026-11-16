@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Flight Flyover Card">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#034b91"/>
+      <stop offset=".52" stop-color="#087ac7"/>
+      <stop offset="1" stop-color="#29cbf4"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset=".55" stop-color="#eff8ff"/>
+      <stop offset="1" stop-color="#b8d5e8"/>
+    </linearGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6ffff" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#f6ffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="5"/></filter>
+    <filter id="shadow" x="-30%" width="160%" y="-30%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#00345d" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="110" fill="url(#sky)"/>
+  <g fill="none" stroke="#d9f2ff" stroke-opacity=".16" stroke-width="3">
+    <circle cx="256" cy="254" r="190"/>
+    <circle cx="256" cy="254" r="137"/>
+    <circle cx="256" cy="254" r="84"/>
+    <path d="M256 45v24 M256 439v24 M47 254h24 M441 254h24"/>
+  </g>
+  <g filter="url(#soft)" stroke="url(#trail)" stroke-width="20" fill="none" stroke-linecap="round">
+    <path d="M224 384 C214 433 199 481 175 530"/>
+    <path d="M288 384 C298 433 313 481 337 530"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path fill="#c0d4e3" stroke="#85acc9" stroke-width="2"
+      d="M235 246 L212 244 Q203 244 203 256 L203 305 Q203 314 212 314 L234 310 Z"/>
+    <path fill="#c0d4e3" stroke="#85acc9" stroke-width="2"
+      d="M277 246 L300 244 Q309 244 309 256 L309 305 Q309 314 300 314 L278 310 Z"/>
+    <path fill="url(#wing)" stroke="#d5eafa" stroke-width="3" stroke-linejoin="round"
+      d="M256 95 C268 95 275 105 278 128 L283 246
+         L432 310 Q446 316 440 326 L284 301
+         L282 389 L311 427 Q316 437 306 440 L256 419
+         L206 440 Q196 437 201 427 L230 389
+         L228 301 L72 326 Q66 316 80 310 L229 246
+         L234 128 C237 105 244 95 256 95 Z"/>
+    <path fill="#294a68" d="M246 119 Q256 112 266 119 L268 139 Q256 136 244 139 Z"/>
+    <path stroke="#d3e8f8" stroke-width="2" fill="none" opacity=".85"
+      d="M256 148 V418 M84 315 L232 269 M428 315 L280 269 M213 431 L256 409 L299 431"/>
+    <path stroke="#fff" stroke-opacity=".85" stroke-width="3" fill="none"
+      d="M235 128 Q241 103 256 103 Q271 103 277 128"/>
+  </g>
+</svg>
