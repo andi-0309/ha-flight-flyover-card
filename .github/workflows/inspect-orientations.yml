@@ -1,0 +1,16 @@
+name: Inspect model source orientations
+on:
+  push:
+    paths:
+      - scripts/inspect-aircraft-orientations.mjs
+      - .github/workflows/inspect-orientations.yml
+  workflow_dispatch:
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/inspect-aircraft-orientations.mjs
