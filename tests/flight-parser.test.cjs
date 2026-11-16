@@ -3,7 +3,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
-const source = fs.readFileSync("dist/ha-flight-flyover-card.js", "utf8");
+// Test the source logic without importing the WebGL modules in Node's VM.
+const source = fs.readFileSync("src/ha-flight-flyover-card.js", "utf8")
+  .replace(/^import .*?;\s*$/gm, "");
 class MockElement {
   constructor() { this.isConnected = false; this.events = []; }
   attachShadow() { return { replaceChildren() {}, append() {} }; }
@@ -21,10 +23,10 @@ const context = {
 };
 vm.runInNewContext(source + "\n globalThis.exportsForTests = {" +
   "modelFor,describe,displayAirport,airportLabel,configOf,homeCoordinates," +
-  "predictFlyover,relativePixels,FlightFlyoverCard,FlightFlyoverEditor};", context);
+  "predictFlyover,relativePixels,aircraftYawForScreen,FlightFlyoverCard,FlightFlyoverEditor};", context);
 const {
   modelFor, describe, displayAirport, airportLabel, configOf, homeCoordinates,
-  predictFlyover, relativePixels, FlightFlyoverCard, FlightFlyoverEditor
+  predictFlyover, relativePixels, aircraftYawForScreen, FlightFlyoverCard, FlightFlyoverEditor
 } = context.exportsForTests;
 
 const settings = configOf({});
@@ -185,4 +187,31 @@ test("Home Assistant visual editor returns an element and sends config-changed",
   assert.equal(event.detail.config.airport_format,"both");
   assert.equal(event.detail.config.type,"custom:ha-flight-flyover-card");
   assert.equal(Object.hasOwn(event.detail.config,"duration"),false);
+});
+
+test("The model's +X nose projects in the same direction as every screen flight vector", () => {
+  const tilt = 9 / Math.hypot(9,3);
+  for (let degrees = 0; degrees < 360; degrees += 15) {
+    const rad = degrees * Math.PI / 180;
+    const dx = Math.sin(rad);
+    const dy = -Math.cos(rad);
+    const yaw = aircraftYawForScreen(dx, dy);
+    // A +X-forward GLB rotated around Y points to (cos(yaw), 0, -sin(yaw)).
+    // The oblique camera projects -Z upward with foreshortening tilt.
+    const projectedX = Math.cos(yaw);
+    const projectedY = -Math.sin(yaw) * tilt;
+    const length = Math.hypot(projectedX, projectedY);
+    assert.ok(Math.abs(projectedX/length - dx) < 1e-10,
+      "nose east-west component wrong for " + degrees + " degrees");
+    assert.ok(Math.abs(projectedY/length - dy) < 1e-10,
+      "nose north-south component wrong for " + degrees + " degrees");
+  }
+});
+
+test("Source uses one pair of static imports and no independent Three.js CDNs", () => {
+  const actualSource = fs.readFileSync("src/ha-flight-flyover-card.js", "utf8");
+  assert.match(actualSource, /import \* as THREE from "three"/);
+  assert.match(actualSource, /import \{ GLTFLoader \} from "three\/addons\/loaders\/GLTFLoader\.js"/);
+  assert.doesNotMatch(actualSource, /esm\.sh\/three|GLTFLoader\.js\?bundle/);
+  assert.doesNotMatch(actualSource, /camera\.position\.set\(5, 4\.5, 8\)/);
 });
