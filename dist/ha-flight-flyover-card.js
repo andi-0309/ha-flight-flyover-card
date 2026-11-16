@@ -245,8 +245,9 @@ class FlightFlyoverCard extends HTMLElement {
     const center=box.getCenter(new THREE.Vector3());
     const length=box.getSize(new THREE.Vector3()).length();
     if(!Number.isFinite(length)||length<=0)throw Error("Invalid aircraft model");
-    scene.position.sub(center);
-    scene.scale.setScalar(4.5/length);
+    const scale=4.5/length;
+    scene.scale.setScalar(scale);
+    scene.position.copy(center).multiplyScalar(-scale);
     this._modelCache.set(model,scene);
     return scene.clone(true);
   }
