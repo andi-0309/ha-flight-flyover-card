@@ -66,6 +66,15 @@ size: 330
 
 Die Karte verwendet den Kompasskurs aus Flightradar24 und dreht das 3D-Modell so, dass die **Flugzeugnase in die Bewegungsrichtung zeigt**. Dazu ist die originale Vorwärtsachse (+X) der AMVLab-Flugzeugmodelle berücksichtigt. Das funktioniert auch bei diagonalen Flugbahnen und frei gedrehtem Bildschirm-Kompasswinkel.
 
+### Animationsablauf
+
+- **Einflug:** Das Flugzeug erscheint kleiner, zunächst aus einer hohen Perspektive (Blick auf die Oberseite). Eine weiche Zoomfahrt lässt es näher kommen.
+- **Überflug:** Die Kamera bewegt sich in eine deutlich flachere, seitlichere Ansicht. Die dreidimensionale Flugzeugnase bleibt trotz Kamerabewegung auf den gemeldeten Kurs ausgerichtet.
+- **Ausflug:** Das Flugzeug entfernt sich mit einem sanften Zoom-out und wird am Bildschirmrand ausgeblendet.
+- **Licht:** Warmes Sonnenlicht, kühles Fülllicht und ein weißes Kantenlicht betonen Rumpf, Flügel und Leitwerk; Filmic Tone Mapping sorgt für ausgewogenere Lichter. Es werden keine aufwendigen Schattenkarten berechnet.
+
+Die Animation wird automatisch anhand des Überflugfortschritts gesteuert und benötigt keine zusätzlichen Dashboard-Einstellungen. Die Three.js-Laufzeit ist zusammen mit dem GLTFLoader im Kartenmodul gebündelt, damit keine zweite Three.js-Instanz geladen wird.
+
 Der aktuelle Flugweg ist eine **Prognose aus der zuletzt gemeldeten Position, dem Kurs und der Geschwindigkeit**, kein fortlaufend aktualisierter Echtzeitpfad. Ohne GPS-Position oder Kurs wird kein Überflug ausgelöst. Die Berechnung orientiert sich an den Koordinaten von `zone.home` und an der konfigurierten Bildschirmgröße.
 
 ## 4. Funktion mit einem Testereignis prüfen
