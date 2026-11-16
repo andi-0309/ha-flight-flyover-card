@@ -80,8 +80,8 @@ function modelCandidates(type) {
     if(!paths.some(item=>item.url===url))paths.push({url,forward});
   };
   add(AMVLAB_BASE,AMVLAB_MODELS[type]);
-  add(GEV_BASE,GEV_MODELS[type]);
   add(FLIGHTAIRMAP_BASE,FLIGHTAIRMAP_MODELS[type]);
+  add(GEV_BASE,GEV_MODELS[type]);
   // Use the closest available airframe if the exact type is missing or down.
   const fallback={
     A220:"A319",A332:"A330",A340:"A330",
