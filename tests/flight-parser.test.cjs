@@ -22,10 +22,12 @@ const context = {
 };
 vm.runInNewContext(source + "\n globalThis.testValues = {" +
   "modelFor,modelCandidates,normalizeNose,flyoverPath,flightPosition,describe," +
+  "renderSettings,paintRescueHelicopter," +
   "displayAirport,airportLabel,configOf,aircraftYawForScreen,flyoverVisuals," +
   "FlightFlyoverCard,FlightFlyoverEditor};", context);
 const {
   modelFor, modelCandidates, normalizeNose, flyoverPath, flightPosition, describe,
+  renderSettings, paintRescueHelicopter,
   displayAirport, airportLabel, configOf, aircraftYawForScreen, flyoverVisuals,
   FlightFlyoverCard, FlightFlyoverEditor
 } = context.testValues;
@@ -128,7 +130,7 @@ test("source model axes rotate onto the +X-forward standard", () => {
   }
 });
 
-test("FR24 event parsing keeps flight number, heading and airport details", () => {
+test("FR24 event parses code and full airport name for separate rows", () => {
   const flight=describe({
     id:"demo-014",flight_number:"LH123",aircraft_code:"B748",heading:111,
     airport_origin_code_iata:"FRA",airport_origin_name:"Frankfurt Airport",
@@ -137,13 +139,47 @@ test("FR24 event parsing keeps flight number, heading and airport details", () =
   assert.equal(flight.model,"B748");
   assert.equal(flight.heading,111);
   assert.equal(flight.number,"LH123");
-  assert.equal(airportLabel(flight,configOf({airport_format:"code"})),"FRA → MUC");
-  assert.equal(airportLabel(flight,configOf({airport_format:"name"})),
-    "Frankfurt Airport → Munich Airport");
-  assert.equal(airportLabel(flight,configOf({airport_format:"both"})),
-    "FRA – Frankfurt Airport → MUC – Munich Airport");
-  assert.equal(airportLabel(flight,configOf({show_origin_airport:false})),"Nach: MUC");
-  assert.equal(displayAirport({code:"FRA"},"name"),"FRA");
+  const both=airportLabel(flight,configOf());
+  assert.equal(both.origin.code,"FRA");
+  assert.equal(both.origin.name,"Frankfurt Airport");
+  assert.equal(both.destination.code,"MUC");
+  assert.equal(both.destination.name,"Munich Airport");
+  assert.equal(airportLabel(flight,configOf({show_origin_airport:false})).origin,null);
+  assert.equal(airportLabel(flight,configOf({show_destination_airport:false})).destination,null);
+  assert.equal(displayAirport({code:"FRA",name:"FRA"}).name,"");
+  assert.equal(displayAirport({code:"",name:"Unknown airfield"}).name,"Unknown airfield");
+  assert.equal(airportLabel(describe({}),configOf()),null);
+});
+
+test("airport DOM lays out code and complete name as distinct lines without an arrow", () => {
+  const card=new FlightFlyoverCard();
+  const created=[];
+  const oldCreate=context.document.createElement;
+  context.document.createElement=(tag)=>{
+    const e={tag,children:[],style:{},className:"",classList:{add(name){e.className += " "+name;}},
+      append(...nodes){e.children.push(...nodes);}};
+    created.push(e);
+    return e;
+  };
+  let appended;
+  card._ensureLayer=()=>({append(ship){appended=ship;}});
+  try{
+    const flight=describe({id:"sample",flight_number:"LH123",
+      airport_origin_code_iata:"FRA",airport_origin_name:"Frankfurt Airport",
+      airport_destination_code_iata:"MUC",airport_destination_name:"Munich Airport"});
+    card._makeShip({flight});
+    assert.equal(appended.tag,"div");
+    const label=created.find(x=>x.className==="ff-label ff-has-route");
+    assert.ok(label);
+    const route=created.find(x=>x.className==="ff-route");
+    const airports=route.children.filter(x=>x.className==="ff-airport");
+    assert.equal(airports.length,2);
+    assert.equal(airports[0].children[0].textContent,"FRA");
+    assert.equal(airports[0].children[1].textContent,"Frankfurt Airport");
+    assert.equal(airports[1].children[0].textContent,"MUC");
+    assert.equal(airports[1].children[1].textContent,"Munich Airport");
+    assert.equal(route.children[1].className,"ff-route-divider");
+  }finally{context.document.createElement=oldCreate;}
 });
 
 test("configuration defaults to 20 seconds and removes geographic and FPS settings", () => {
@@ -152,13 +188,74 @@ test("configuration defaults to 20 seconds and removes geographic and FPS settin
     cooldown:30,model_source:"https://invalid.test",duration:undefined
   });
   assert.equal(settings.duration,20);
+  assert.equal(settings.render_quality,"balanced");
+  assert.equal(settings.size,330);
   for(const key of ["screen_short_edge_meters","default_speed_kmh","max_fps",
-                    "cooldown","model_source","show_contrails"]) {
+                    "cooldown","model_source","show_contrails","airport_format"]) {
     assert.equal(Object.hasOwn(settings,key),false,key);
   }
   assert.equal(configOf({duration:30}).duration,30);
   assert.equal(configOf({duration:200}).duration,90);
+  assert.equal(configOf({size:1800}).size,1200);
+  assert.equal(configOf({size:120}).size,120);
+  assert.equal(configOf({render_quality:"nonsense"}).render_quality,"balanced");
   assert.equal(configOf({screen_top_bearing:397.5}).screen_top_bearing,37.5);
+});
+
+test("helicopter ICAO codes choose rotorcraft, never an Airbus fallback", () => {
+  const types={EC35:"H135",H135:"H135",EC45:"H145",H145:"H145",BK17:"H145",
+    B407:"B407",B06:"B06",B206:"B06",GAZL:"GAZL",R22:"R22",R44:"R44",
+    R66:"R66",AS50:"AS50",AS55:"AS55",A109:"A109",A139:"AW139",
+    S76:"S76",ADAC_H135:"ADAC_H135",ADAC_H145:"ADAC_H145"};
+  for(const [code,expected] of Object.entries(types))assert.equal(modelFor(code),expected,code);
+  for(const code of Object.keys(types)){
+    const candidates=modelCandidates(types[code]);
+    assert.ok(candidates.length>0,code);
+    assert.ok(candidates.every(x=>!x.url.endsWith("A320_nologo.glb")),code+" not an airplane");
+  }
+  assert.ok(modelCandidates("H135")[0].url.endsWith("/ec35/glTF2/EC35.glb"));
+  assert.equal(modelCandidates("H135")[0].forward,"+Z");
+  assert.ok(modelCandidates("B06")[0].url.endsWith("/bell206.glb"));
+  assert.equal(modelCandidates("B06")[0].forward,"-X");
+  assert.ok(modelCandidates("GAZL")[0].url.endsWith("/gazl/glTF2/GAZL.glb"));
+});
+
+test("ADAC yellow rescue model requires explicit operator or demo code", () => {
+  const rescue=describe({aircraft_code:"EC35",operator:"ADAC Luftrettung",callsign:"CHRISTOPH 40"});
+  assert.equal(rescue.model,"ADAC_H135");
+  assert.equal(rescue.adac,true);
+  const larger=describe({aircraft_code:"EC45",airline_name:"ADAC Luftrettung"});
+  assert.equal(larger.model,"ADAC_H145");
+  assert.equal(larger.adac,true);
+  assert.ok(modelCandidates(larger.model)[0].url.endsWith("/ec35/glTF2/EC35.glb"));
+  const other=describe({aircraft_code:"EC35",operator:"DRF Luftrettung",callsign:"CHRISTOPH 40"});
+  assert.equal(other.model,"H135");
+  assert.equal(other.adac,false);
+  const original={name:"fuselage",map:{id:1},color:{hex:"",set(hex){this.hex=hex;}},
+    clone(){return {...this,map:this.map,color:{hex:"",set(hex){this.hex=hex;}}};}};
+  const rotor={name:"Rotor",clone(){throw Error("do not repaint rotor");}};
+  const ship={isMesh:true,material:[original,rotor]};
+  paintRescueHelicopter({traverse(fn){fn(ship);}});
+  assert.equal(ship.material[0].color.hex,"#ffcc00");
+  assert.equal(ship.material[0].map,null);
+  assert.equal(ship.material[1],rotor);
+  assert.ok(original.map);
+});
+
+test("visual editor exposes all three quality levels and large size range", () => {
+  const source=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(source,/createField\("render_quality", strings\.quality, "select"/);
+  assert.match(source,/\["performance", strings\.performance\]/);
+  assert.match(source,/\["balanced", strings\.balanced\]/);
+  assert.match(source,/\["quality", strings\.high\]/);
+  assert.match(source,/check\("show_flight_number"/);
+  assert.doesNotMatch(source,/createField\("airport_format"/);
+  const editor=new FlightFlyoverEditor();
+  editor.setConfig({type:"custom:ha-flight-flyover-card"});
+  editor._change("render_quality",{type:"select",value:"quality"});
+  assert.equal(editor.events[0].detail.config.render_quality,"quality");
+  editor._change("size",{type:"range",value:"1200"});
+  assert.equal(editor.events[1].detail.config.size,1200);
 });
 
 test("flight path crosses entire screen on geographic heading", () => {
@@ -250,12 +347,26 @@ test("render loop uses float positions and requestAnimationFrame without FPS gat
   assert.doesNotMatch(code,/_createTrails|_drawTrails|_trailsRoot|TRAIL_LIFETIME_MS|SVG_NS|show_contrails/);
 });
 
-test("render quality uses hardware MSAA without high-resolution supersampling", () => {
-  const code=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
-  assert.match(code,/antialias:true,alpha:true,powerPreference:"low-power"/);
-  assert.match(code,/renderer\.setPixelRatio\(1\)/);
-  assert.doesNotMatch(code,/renderer\.setPixelRatio\(\s*(window\.devicePixelRatio|2|1\.5)/);
-  assert.match(code,/renderer\.setSize\(this\._config\.size,/);
+test("three rendering profiles scale native resolution with aircraft size", () => {
+  const fast=renderSettings(330,"performance");
+  const balanced=renderSettings(330,"balanced");
+  const sharp=renderSettings(330,"quality");
+  assert.equal(fast.width,330);
+  assert.equal(fast.height,220);
+  assert.equal(fast.pixelRatio,1);
+  assert.equal(fast.antialias,false);
+  assert.equal(balanced.pixelRatio,1);
+  assert.equal(balanced.antialias,true);
+  assert.equal(sharp.pixelRatio,1.5);
+  assert.equal(sharp.antialias,true);
+  assert.equal(renderSettings(1200,"performance").width,1200);
+  assert.equal(renderSettings(1200,"quality").width * renderSettings(1200,"quality").pixelRatio,1800);
+  assert.equal(renderSettings(1200,"quality").height * renderSettings(1200,"quality").pixelRatio,1200);
+  const source=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(source,/antialias:settings\.antialias/);
+  assert.match(source,/renderer\.setPixelRatio\(settings\.pixelRatio\)/);
+  assert.match(source,/renderer\.setSize\(settings\.width,settings\.height,false\)/);
+  assert.match(source,/control\.max = key === "size" \? "1200"/);
 });
 
 test("release changelog groups meaningful notes with no auto-generated commit dump", async () => {
