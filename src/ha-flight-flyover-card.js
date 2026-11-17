@@ -516,9 +516,11 @@ class FlightFlyoverCard extends HTMLElement {
       const [{THREE},loaded]=await Promise.all([this._getThree(),this._getModel(entry.flight.model)]);
       if(!this.isConnected || !this._active.has(entry.id))return;
       const renderer=new THREE.WebGLRenderer({
-        antialias:false,alpha:true,powerPreference:"low-power"
+        antialias:true,alpha:true,powerPreference:"low-power"
       });
       context.renderer=renderer;
+      // Hardware MSAA smooths silhouette edges without increasing pixel count.
+      // Avoid supersampling here: it scales work with the square of the pixel ratio.
       renderer.setPixelRatio(1);
       renderer.setSize(this._config.size,Math.round(this._config.size/1.5),false);
       renderer.setClearColor(0x000000,0);

@@ -92,6 +92,13 @@ jobs:
             next="v${major}.${minor}.$((patch + 1))"
           fi
           echo "version=$next" >> "$GITHUB_OUTPUT"
+      - name: Write concise categorized release notes
+        if: steps.sync.outputs.publish == 'true'
+        shell: bash
+        run: |
+          latest="$(git tag --list 'v*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+ | head -n 1 || true)"
+          node scripts/release-notes.mjs "$latest" > release-notes.md
+          cat release-notes.md
       - name: Publish Marketplace release
         if: steps.sync.outputs.publish == 'true'
         env:
@@ -101,4 +108,4 @@ jobs:
           gh release create "$VERSION" dist/ha-flight-flyover-card.js \
             --target "$(git rev-parse HEAD)" \
             --title "$VERSION" \
-            --generate-notes
+            --notes-file release-notes.md

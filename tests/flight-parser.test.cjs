@@ -250,6 +250,29 @@ test("render loop uses float positions and requestAnimationFrame without FPS gat
   assert.doesNotMatch(code,/_createTrails|_drawTrails|_trailsRoot|TRAIL_LIFETIME_MS|SVG_NS|show_contrails/);
 });
 
+test("render quality uses hardware MSAA without high-resolution supersampling", () => {
+  const code=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(code,/antialias:true,alpha:true,powerPreference:"low-power"/);
+  assert.match(code,/renderer\.setPixelRatio\(1\)/);
+  assert.doesNotMatch(code,/renderer\.setPixelRatio\(\s*(window\.devicePixelRatio|2|1\.5)/);
+  assert.match(code,/renderer\.setSize\(this\._config\.size,/);
+});
+
+test("release changelog groups meaningful notes with no auto-generated commit dump", async () => {
+  const {formatReleaseNotes}=await import("../scripts/release-notes.mjs");
+  const notes=formatReleaseNotes([
+    "perf: sharpen aircraft silhouettes\n\nRelease-Note(perf): Smooth airplane edges using hardware MSAA while retaining 1x render resolution.",
+    "ci: improve release automation\n\nRelease-Note(ci): Publish short categorized GitHub changelogs.",
+    "build: sync bundled marketplace asset [skip ci]",
+    "test: add tests"
+  ]);
+  assert.match(notes,/### Performance/);
+  assert.match(notes,/### Maintenance/);
+  assert.match(notes,/hardware MSAA/);
+  assert.match(notes,/short categorized GitHub changelogs/);
+  assert.doesNotMatch(notes,/sync bundled|add tests|full changelog/i);
+});
+
 test("the flyover uses no lingering trail elements or timers", () => {
   const code=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
   assert.doesNotMatch(code,/createElementNS|setTimeout|stroke-width|ff-shadow|linearGradient/);
