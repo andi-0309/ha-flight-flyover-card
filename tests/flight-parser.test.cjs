@@ -178,8 +178,65 @@ test("airport DOM lays out code and complete name as distinct lines without an a
     assert.equal(airports[0].children[1].textContent,"Frankfurt Airport");
     assert.equal(airports[1].children[0].textContent,"MUC");
     assert.equal(airports[1].children[1].textContent,"Munich Airport");
-    assert.equal(route.children[1].className,"ff-route-divider");
+    const connector=route.children[1];
+    assert.equal(connector.className,"ff-connection");
+    assert.equal(connector.children[0].className,"ff-connection-line");
+    assert.equal(connector.children[1].textContent,"✈");
+    assert.equal(connector.children[2].className,"ff-connection-line");
+    assert.equal(label.style.marginTop,"-102.3px");
   }finally{context.document.createElement=oldCreate;}
+});
+
+test("compact flight label adapts to single airports, no airports and helicopters", () => {
+  const card=new FlightFlyoverCard();
+  const created=[];
+  const previous=context.document.createElement;
+  context.document.createElement=(tag)=>{
+    const el={tag,children:[],style:{},className:"",textContent:"",
+      classList:{add(name){el.className+=" "+name;}},
+      append(...children){el.children.push(...children);}};
+    created.push(el);
+    return el;
+  };
+  card._ensureLayer=()=>({append(){}});
+  try {
+    const base=describe({
+      id:"test-heli",flight_number:"CHRISTOPH 40",aircraft_code:"EC35",
+      airport_origin_code_icao:"EDMA",airport_origin_name:"Augsburg Airport"
+    });
+    card._makeShip({flight:base});
+    assert.ok(created.some(x=>x.className==="ff-label ff-single-route"));
+    const one=created.find(x=>x.className==="ff-route ff-single");
+    assert.equal(one.children.length,1);
+    assert.equal(one.children[0].children[0].textContent,"EDMA");
+    assert.equal(one.children[0].children[1].textContent,"Augsburg Airport");
+    created.length=0;
+
+    card._makeShip({flight:describe({id:"no-airport",flight_number:"LH150"})});
+    assert.ok(created.some(x=>x.className==="ff-label ff-number-only"));
+    assert.ok(!created.some(x=>x.className==="ff-route"));
+    created.length=0;
+
+    card._makeShip({flight:describe({
+      id:"heli-route",flight_number:"CHRISTOPH 40",aircraft_code:"EC35",
+      airport_origin_code_icao:"EDMA",airport_origin_name:"Augsburg Airport",
+      airport_destination_code_icao:"EDDM",airport_destination_name:"Munich Airport"
+    })});
+    const connector=created.find(x=>x.className==="ff-connection");
+    assert.equal(connector.children[1].textContent,"✣");
+  }finally{context.document.createElement=previous;}
+});
+
+test("compact label CSS remains readable and capped regardless of plane size", () => {
+  const source=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(source,/ff-has-route\{width:min\(340px/);
+  assert.match(source,/ff-single-route\{width:min\(220px/);
+  assert.match(source,/ff-number-only\{padding:6px/);
+  assert.match(source,/ff-airport-code\{font:700 20px/);
+  assert.match(source,/ff-airport-name\{font:400 12px/);
+  assert.match(source,/-webkit-line-clamp:2/);
+  assert.match(source,/rgba\(15,27,42,\.94\)/);
+  assert.match(source,/Math\.min\(112,Math\.max\(34,this\._config\.size\*\.31\)\)/);
 });
 
 test("configuration defaults to 20 seconds and removes geographic and FPS settings", () => {
