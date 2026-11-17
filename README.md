@@ -16,6 +16,7 @@
 
 - Aircraft models for Airbus, Boeing, Embraer, regional jets and light aircraft
 - Helicopters: H135, Bell 206/407 and Gazelle, plus related ICAO types using their closest available model
+- Animated main and tail rotors for H135/EC135 helicopters, including the yellow ADAC rescue variant
 - Yellow ADAC-inspired H135 rescue helicopter when the event identifies ADAC as the operator
 - Smooth **20-second flyovers** triggered by Flightradar24
 - Camera zoom, natural lighting and a subtle aircraft shadow
@@ -61,6 +62,7 @@ render_quality: balanced
 
 - Each new `flightradar24_entry` event starts a flyover. Repeated aircraft IDs are ignored for 15 minutes.
 - Aircraft models load on demand. Some variants use the closest available model.
+- Rotor animation currently applies to H135/EC135 models with separate blade meshes. Bell 206/407 and Gazelle model files merge rotor and fuselage geometry, so their rotors remain static to avoid rotating the entire aircraft.
 - The Marketplace detects new versions automatically from GitHub releases.
 
 ## Credits
