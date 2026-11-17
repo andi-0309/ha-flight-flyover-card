@@ -46,6 +46,10 @@ const examples = {
   famCITATION:"https://raw.githubusercontent.com/Ysurac/FlightAirMap-3dmodels/master/c550/glTF2/C550.glb",
   amvlabB787:"https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/B787_nologo.glb",
   amvlabA380:"https://raw.githubusercontent.com/amvlab/aircraft-models/main/models/A380_nologo.glb",
+  famEC35:"https://raw.githubusercontent.com/Ysurac/FlightAirMap-3dmodels/master/ec35/glTF2/EC35.glb",
+  famGAZL:"https://raw.githubusercontent.com/Ysurac/FlightAirMap-3dmodels/master/gazl/glTF2/GAZL.glb",
+  famB407:"https://raw.githubusercontent.com/Ysurac/FlightAirMap-3dmodels/master/b407/glTF2/B407.glb",
+  gevBell206:"https://raw.githubusercontent.com/WorldPixelMap/android-gods-eye-view/main/public/models/bell206.glb",
   c172:"https://raw.githubusercontent.com/WorldPixelMap/android-gods-eye-view/main/public/models/c172.glb",
 };
 function parseGLB(bytes) {
@@ -133,6 +137,10 @@ for(const [name,url] of Object.entries(examples)){
     if(!response.ok)throw Error("HTTP "+response.status);
     const bytes=new Uint8Array(await response.arrayBuffer());
     const glb=parseGLB(bytes);
-    console.log(JSON.stringify({name,bytes:bytes.length,...worldLandmarks(glb)}));
+    console.log(JSON.stringify({name,bytes:bytes.length,...worldLandmarks(glb),
+      materials:glb.materials?.map((m,i)=>({i,name:m.name,
+        color:m.pbrMetallicRoughness?.baseColorFactor,
+        texture:m.pbrMetallicRoughness?.baseColorTexture?.index,
+        alpha:m.alphaMode})).slice(0,80)}));
   }catch(error){console.log(JSON.stringify({name,error:String(error)}));}
 }
