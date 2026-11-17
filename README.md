@@ -14,10 +14,12 @@
 
 ## Features
 
-- Real aircraft models for Airbus, Boeing, Embraer, regional jets and light aircraft
+- Aircraft models for Airbus, Boeing, Embraer, regional jets and light aircraft
+- Helicopters: H135, Bell 206/407 and Gazelle, plus related ICAO types using their closest available model
+- Yellow ADAC-inspired H135 rescue helicopter when the event identifies ADAC as the operator
 - Smooth **20-second flyovers** triggered by Flightradar24
 - Camera zoom, natural lighting and a subtle aircraft shadow
-- Flight number, departure and destination airports
+- Flight number plus airport code and full name on separate lines, linked by a subtle divider
 - Easy configuration in the **visual card editor**
 
 ## Install
@@ -37,10 +39,23 @@ No YAML required. Optional example:
 type: custom:ha-flight-flyover-card
 duration: 20
 screen_top_bearing: 0
-airport_format: code
+size: 330
+render_quality: balanced
 ```
 
 **Duration** is in seconds. **Top of screen** is a compass angle (0° = north, 90° = east). The card uses the flight's heading for direction; it does not require GPS-based screen scaling or speed calculations.
+
+**Size** adjusts the aircraft and render dimensions from 120 to 1,200 px. Choose one of three graphics profiles in the visual editor:
+
+| Profile | Antialiasing | Render resolution | Best for |
+| --- | --- | --- | --- |
+| Fast (`performance`) | Off | 1× aircraft size | Raspberry Pi / low-power devices |
+| Balanced (`balanced`, default) | On (MSAA) | 1× aircraft size | Everyday use |
+| Sharp (`quality`) | On (MSAA) | 1.5× aircraft size | Powerful PCs and larger TVs |
+
+**Airport labels:** each airport shows its code on the first line and full name below; a small divider replaces the arrow. Previous `airport_format` options are safely ignored.
+
+**ADAC rescue test event:** use `aircraft_code: EC35` and `operator: ADAC Luftrettung` in a `flightradar24_entry` event. H145/EC45 is currently represented by the closest H135 3D model with an illustrative yellow paint scheme. Real ADAC branding is not included.
 
 ## Notes
 
