@@ -131,13 +131,31 @@ function summary(glb) {
     min:allMin,max:allMax,scene:glb.scene,landmarks,
     meshSamples:sorted.slice(0,2)};
 }
+function rotorNodes(glb) {
+  const nodes=glb.nodes||[], meshes=glb.meshes||[];
+  const parents=new Map();
+  nodes.forEach((n,i)=>(n.children||[]).forEach(c=>parents.set(c,i)));
+  return nodes.map((n,i)=>{
+    const mesh=n.mesh===undefined?null:meshes[n.mesh];
+    const label=n.name||mesh?.name||"";
+    if(!/(rotor|blade|mast|spinner|fan|fenestron|hub|propeller)/i.test(label))return null;
+    const ancestry=[];
+    let parent=parents.get(i);
+    while(parent!==undefined&&ancestry.length<6){
+      ancestry.push({index:parent,name:nodes[parent].name||"",translation:nodes[parent].translation,rotation:nodes[parent].rotation});
+      parent=parents.get(parent);
+    }
+    return {index:i,name:label,mesh:n.mesh,translation:n.translation,rotation:n.rotation,scale:n.scale,
+      children:n.children,ancestry,primitiveCount:mesh?.primitives?.length};
+  }).filter(Boolean).slice(0,75);
+}
 for(const [name,url] of Object.entries(examples)){
   try {
     const response=await fetch(url,{signal:AbortSignal.timeout(12000)});
     if(!response.ok)throw Error("HTTP "+response.status);
     const bytes=new Uint8Array(await response.arrayBuffer());
     const glb=parseGLB(bytes);
-    console.log(JSON.stringify({name,bytes:bytes.length,...worldLandmarks(glb),
+    console.log(JSON.stringify({name,bytes:bytes.length,...worldLandmarks(glb),rotorNodes:rotorNodes(glb),
       materials:glb.materials?.map((m,i)=>({i,name:m.name,
         color:m.pbrMetallicRoughness?.baseColorFactor,
         texture:m.pbrMetallicRoughness?.baseColorTexture?.index,
