@@ -152,14 +152,12 @@ test("configuration defaults to 20 seconds and removes geographic and FPS settin
     cooldown:30,model_source:"https://invalid.test",duration:undefined
   });
   assert.equal(settings.duration,20);
-  assert.equal(settings.show_contrails,true);
   for(const key of ["screen_short_edge_meters","default_speed_kmh","max_fps",
-                    "cooldown","model_source"]) {
+                    "cooldown","model_source","show_contrails"]) {
     assert.equal(Object.hasOwn(settings,key),false,key);
   }
   assert.equal(configOf({duration:30}).duration,30);
   assert.equal(configOf({duration:200}).duration,90);
-  assert.equal(configOf({show_contrails:false}).show_contrails,false);
   assert.equal(configOf({screen_top_bearing:397.5}).screen_top_bearing,37.5);
 });
 
@@ -223,20 +221,12 @@ test("camera zoom and model nose orientation stay smooth", () => {
   }
 });
 
-test("contrails retain recent points and dissolve older ones", () => {
-  const path=flyoverPath(1920,1080,330,90,0,"heading");
-  const p=()=>({setAttribute(key,value){this[key]=value;}});
-  const trails={lastSample:-Infinity,group:{},gradient:p(),paths:[p(),p()],samples:[[],[]]};
+test("unavailable contrail setting is removed from config and not emitted", () => {
+  const settings=configOf({show_contrails:true,duration:20});
+  assert.equal(Object.hasOwn(settings,"show_contrails"),false);
   const card=new FlightFlyoverCard();
-  const ctx={trails};
-  card._drawTrails(ctx,path,.1,100);
-  card._drawTrails(ctx,path,.2,210);
-  assert.equal(trails.samples[0].length,2);
-  assert.match(trails.paths[0].d,/^M.*L/);
-  assert.match(trails.paths[1].d,/^M.*L/);
-  card._drawTrails(ctx,path,.8,6200);
-  assert.equal(trails.samples[0].length,1);
-  assert.equal(trails.samples[1].length,1);
+  card.setConfig({show_contrails:true,duration:20});
+  assert.equal(Object.hasOwn(card._config,"show_contrails"),false);
 });
 
 test("visual editor exposes just simple user-facing settings", () => {
@@ -244,9 +234,7 @@ test("visual editor exposes just simple user-facing settings", () => {
   const editor=new FlightFlyoverEditor();
   editor.setConfig({type:"custom:ha-flight-flyover-card"});
   editor._change("duration",{type:"number",value:"25"});
-  editor._change("show_contrails",{type:"checkbox",checked:false});
   assert.equal(editor.events[0].detail.config.duration,25);
-  assert.equal(editor.events[1].detail.config.show_contrails,false);
   assert.equal(editor.events[0].detail.config.type,"custom:ha-flight-flyover-card");
 });
 
@@ -259,7 +247,16 @@ test("render loop uses float positions and requestAnimationFrame without FPS gat
   assert.doesNotMatch(code,/time - context\.lastFrame/);
   assert.doesNotMatch(code,/shadowVisuals|ff-shadow|radial-gradient\(ellipse/);
   assert.match(code,/filter:drop-shadow/);
-  assert.match(code,/TRAIL_LIFETIME_MS/);
+  assert.doesNotMatch(code,/_createTrails|_drawTrails|_trailsRoot|TRAIL_LIFETIME_MS|SVG_NS|show_contrails/);
+});
+
+test("the flyover uses no lingering trail elements or timers", () => {
+  const code=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.doesNotMatch(code,/createElementNS|setTimeout|stroke-width|ff-shadow|linearGradient/);
+  assert.match(code,/layer\.append\(stylesheet\)/);
+  assert.match(code,/context\.ship\.remove\(\)/);
+  assert.match(code,/check\("show_flight_number"/);
+  assert.doesNotMatch(code,/check\("show_contrails"/);
 });
 
 test("repository includes symmetrical integration icon", () => {
