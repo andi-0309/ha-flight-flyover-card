@@ -22,12 +22,12 @@ const context = {
 };
 vm.runInNewContext(source + "\n globalThis.testValues = {" +
   "modelFor,modelCandidates,normalizeNose,flyoverPath,flightPosition,describe," +
-  "renderSettings,paintRescueHelicopter," +
+  "renderSettings,paintRescueHelicopter,helicopterLabelAnchor,projectedLabelOffset," +
   "displayAirport,airportLabel,configOf,aircraftYawForScreen,flyoverVisuals," +
   "FlightFlyoverCard,FlightFlyoverEditor};", context);
 const {
   modelFor, modelCandidates, normalizeNose, flyoverPath, flightPosition, describe,
-  renderSettings, paintRescueHelicopter,
+  renderSettings, paintRescueHelicopter, helicopterLabelAnchor, projectedLabelOffset,
   displayAirport, airportLabel, configOf, aircraftYawForScreen, flyoverVisuals,
   FlightFlyoverCard, FlightFlyoverEditor
 } = context.testValues;
@@ -185,6 +185,34 @@ test("airport DOM lays out code and complete name as distinct lines without an a
     assert.equal(connector.children[2].className,"ff-connection-line");
     assert.equal(label.style.marginTop,"-102.3px");
   }finally{context.document.createElement=oldCreate;}
+});
+
+test("helicopter label follows the fuselage center, not the rotor or canvas origin", () => {
+  let traversed=0,updated=0;
+  const fuselage={isMesh:true,name:"fuselage",centerX:2.5};
+  const rotor={isMesh:true,name:"mainrotor",centerX:80};
+  const plane={
+    updateWorldMatrix(){updated++;},
+    traverse(callback){traversed++;callback(rotor);callback(fuselage);},
+    worldToLocal(point){point.x-=1;return point;}
+  };
+  class Box3 {
+    setFromObject(object){this.object=object;return this;}
+    isEmpty(){return false;}
+    getCenter(vector){vector.x=this.object.centerX;return vector;}
+  }
+  class Vector3 {constructor(){this.x=0;this.y=0;this.z=0;}}
+  const center=helicopterLabelAnchor(plane,{Box3,Vector3});
+  assert.equal(center.x,1.5);
+  assert.equal(traversed,1,"mesh traversal is performed once per helicopter");
+  assert.equal(updated,1);
+  assert.equal(projectedLabelOffset(0,600),0);
+  assert.equal(projectedLabelOffset(.5,600),150);
+  assert.equal(projectedLabelOffset(-.25,400),-50);
+  const source=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(source,/HELICOPTER_TYPES\.has\(entry\.flight\.model\)/);
+  assert.match(source,/context\.projectedAnchor\.copy\(context\.helicopterAnchor\)/);
+  assert.match(source,/context\.label\.style\.transform="translate3d\("/);
 });
 
 test("compact flight label adapts to single airports, no airports and helicopters", () => {
