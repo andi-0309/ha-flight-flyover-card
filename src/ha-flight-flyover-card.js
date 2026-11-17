@@ -56,6 +56,8 @@ const FLIGHTAIRMAP_MODELS=Object.freeze({
   CRJ9:["crj9/glTF2/CRJ9.glb","+Z"],
   GLIDER:["ask21/glTF2/AS21.glb","+Z"],
   HELI:["ec35/glTF2/EC35.glb","+Z"],
+  H135:["ec35/glTF2/EC35.glb","+Z"],
+  GAZL:["gazl/glTF2/GAZL.glb","+Z"],
   B407:["b407/glTF2/B407.glb","+Z"]
 });
 const AMVLAB_MODELS=Object.freeze({
@@ -69,8 +71,15 @@ const GEV_MODELS=Object.freeze({
   B747:["airplane.glb","-X"],
   ATR72:["atr72.glb","-X"],
   CITATION:["citation2.glb","-X"],
-  B407:["bell206.glb","-X"]
+  B407:["bell206.glb","-X"],
+  B06:["bell206.glb","-X"]
 });
+const HELICOPTER_TYPES=new Set([
+  "HELI","H135","H145","ADAC_H135","ADAC_H145",
+  "B407","B06","GAZL","R22","R44","R66",
+  "AS50","AS55","EC20","EC30","B412","B429",
+  "B105","A109","A119","AW139","S76","S92"
+]);
 function modelCandidates(type) {
   const paths=[];
   const add=(base,meta)=> {
@@ -97,7 +106,13 @@ function modelCandidates(type) {
     PA18:"PA28",PA22:"PA28",PA32:"PA28",DR40:"PA28",
     SR22:"PA28",PC12:"PA28",
     DA42:"C310",BE20:"C310",FK9:"C172",
-    B407:"HELI",LEGACY:"CITATION",CL60:"CITATION",
+    H145:"H135",ADAC_H135:"H135",ADAC_H145:"H135",
+    AS50:"GAZL",AS55:"GAZL",EC20:"GAZL",EC30:"GAZL",
+    R22:"B06",R44:"B06",R66:"B06",B407:"B06",
+    B412:"B407",B429:"B407",B105:"H135",
+    A109:"H135",A119:"GAZL",AW139:"H135",
+    S76:"H135",S92:"H135",
+    LEGACY:"CITATION",CL60:"CITATION",
     DH8D:"ATR72",DH8C:"ATR72",
     B707:"B737",MD11:"B787",BAE146:"E190",
     SF34:"ATR72",CITATION:"B789",GLIDER:"C172"
@@ -107,8 +122,37 @@ function modelCandidates(type) {
     add(GEV_BASE,GEV_MODELS[fallback]);
     add(FLIGHTAIRMAP_BASE,FLIGHTAIRMAP_MODELS[fallback]);
   }
-  if(type!=="A320")add(AMVLAB_BASE,AMVLAB_MODELS.A320);
+  if(HELICOPTER_TYPES.has(type)){
+    add(FLIGHTAIRMAP_BASE,FLIGHTAIRMAP_MODELS.H135);
+    add(GEV_BASE,GEV_MODELS.B06);
+  }else if(type!=="A320")add(AMVLAB_BASE,AMVLAB_MODELS.A320);
   return paths;
+}
+// Yellow H135 rescue presentation; retain original glass and rotor surfaces.
+// ADAC-inspired only: not an official operator-provided 3D asset.
+function paintRescueHelicopter(root) {
+  root.traverse((object) => {
+    if(!object.isMesh || !object.material)return;
+    const recolor = (original) => {
+      if(!/^fuselage(?:\.|$)/i.test(String(original?.name||"")))return original;
+      const material=original.clone();
+      material.map=null;
+      material.color?.set("#ffcc00");
+      if(typeof material.metalness==="number")material.metalness=Math.min(material.metalness,.25);
+      if(typeof material.roughness==="number")material.roughness=Math.max(material.roughness,.48);
+      material.needsUpdate=true;
+      return material;
+    };
+    object.material=Array.isArray(object.material) ? object.material.map(recolor):recolor(object.material);
+  });
+  return root;
+}
+function renderSettings(size,quality) {
+  const width=clamp(size,120,1200,DEFAULTS.size);
+  const profile=quality==="performance" ? {pixelRatio:1,antialias:false}
+    : quality==="quality" ? {pixelRatio:1.5,antialias:true}
+    : {pixelRatio:1,antialias:true};
+  return {width,height:Math.round(width/1.5),...profile};
 }
 function normalizeNose(angle) {
   // All third-party GLBs are rotated onto our +X-forward convention so that
@@ -123,7 +167,7 @@ const DEFAULTS = Object.freeze({
   show_flight_number: true,
   show_origin_airport: true,
   show_destination_airport: true,
-  airport_format: "code",
+  render_quality: "balanced",
   size: 330
 });
 function textValue(value) {
@@ -154,8 +198,8 @@ function configOf(input = {}) {
     show_flight_number: input.show_flight_number !== false,
     show_origin_airport: input.show_origin_airport !== false,
     show_destination_airport: input.show_destination_airport !== false,
-    airport_format: choice(input.airport_format, ["code", "name", "both"], DEFAULTS.airport_format),
-    size: clamp(input.size, 120, 700, DEFAULTS.size)
+    render_quality: choice(input.render_quality, ["performance", "balanced", "quality"], DEFAULTS.render_quality),
+    size: clamp(input.size, 120, 1200, DEFAULTS.size)
   };
 }
 // AMVLab's model nose points in local +X (the convention also used by WebATM).
@@ -263,43 +307,68 @@ function modelFor(value) {
   if(/^(C510|C525|C550|C560|C56X|C680|E50P|E55P|CIT|PC24|LJ45|LJ35)/.test(c))return "CITATION";
   if(/^(CL60|CL30|G280|F900|FA7X)/.test(c))return "CL60";
   if(/^(GLEX|GLF4|GLF5|GLF6|G650|G700|LEGACY)/.test(c))return "LEGACY";
-  if(/^B407/.test(c))return "B407";
-  if(/^(EC35|H135|EC45|H145|R22|R44|R66|B06|HELI|AS35)/.test(c))return "HELI";
+  if(/^(ADACH145|ADACEC45)/.test(c))return "ADAC_H145";
+  if(/^(ADACH135|ADACEC35|ADACRTH|ADAC)/.test(c))return "ADAC_H135";
+  if(/^(EC35|EC135|H135|EC635|HELI)/.test(c))return "H135";
+  if(/^(AH145|H145|EC45|EC145|BK17|BK117|H72|UH72)/.test(c))return "H145";
+  if(/^(B407|BELL407)/.test(c))return "B407";
+  if(/^(B06|B206|B206L|BELL206)/.test(c))return "B06";
+  if(/^(GAZL|SA341|SA342|GAZELLE)/.test(c))return "GAZL";
+  if(/^R22/.test(c))return "R22";
+  if(/^R44/.test(c))return "R44";
+  if(/^R66/.test(c))return "R66";
+  if(/^(AS50|AS350|AS550|H125)/.test(c))return "AS50";
+  if(/^(AS55|AS355)/.test(c))return "AS55";
+  if(/^(EC20|EC120|H120)/.test(c))return "EC20";
+  if(/^(EC30|EC130|H130)/.test(c))return "EC30";
+  if(/^(B412|B212)/.test(c))return "B412";
+  if(/^B429/.test(c))return "B429";
+  if(/^(B105|BO105)/.test(c))return "B105";
+  if(/^(A109|AW109)/.test(c))return "A109";
+  if(/^(A119|AW119)/.test(c))return "A119";
+  if(/^(A139|AW139|A169|AW169|A189|AW189)/.test(c))return "AW139";
+  if(/^(S76|S92)/.test(c))return c.startsWith("S92")?"S92":"S76";
+  if(/^(EC25|EC55|AS65|NH90|H160)/.test(c))return "H145";
   return "A320";
 }
 function describe(raw) {
-  const data = raw && typeof raw === "object"
-    ? (raw.data && typeof raw.data === "object" ? raw.data : raw) : {};
-  const heading = numberOrNull(data.heading ?? data.track ?? data.course);
+  const data=raw&&typeof raw==="object"
+    ? (raw.data&&typeof raw.data==="object" ? raw.data:raw):{};
+  const heading=numberOrNull(data.heading??data.track??data.course);
+  const model=modelFor(firstValue(data,"aircraft_code","aircraft_type","type","model"));
+  // "Christoph" callsigns also belong to non-ADAC operators; no branding by callsign.
+  const operator=[data.airline_name,data.operator_name,data.operator,
+    data.airline,data.flight_operator,data.owner].map(textValue).join(" ");
+  const isAdac=/\bADAC\b/i.test(operator)||model.startsWith("ADAC_");
+  const selected=isAdac
+    ? (model==="H145"||model==="ADAC_H145"?"ADAC_H145":
+      ["H135","HELI","ADAC_H135","A320"].includes(model)?"ADAC_H135":model)
+    : model;
   return {
-    id: firstValue(data, "id", "flight_number", "callsign", "aircraft_registration"),
-    number: firstValue(data, "flight_number", "callsign", "number", "aircraft_registration") || "Unbekannter Flug",
-    model: modelFor(firstValue(data, "aircraft_code", "aircraft_type", "type", "model")),
-    heading: heading === null ? null : degrees(heading),
-    origin: {
-      code: firstValue(data, "airport_origin_code_iata", "airport_origin_code_icao", "from_iata", "from_icao"),
-      name: firstValue(data, "airport_origin_name", "airport_origin_city", "from_name", "from_city")
+    id:firstValue(data,"id","flight_number","callsign","aircraft_registration"),
+    number:firstValue(data,"flight_number","callsign","number","aircraft_registration")||"Unbekannter Flug",
+    model:selected,
+    adac:selected==="ADAC_H135"||selected==="ADAC_H145",
+    heading:heading===null?null:degrees(heading),
+    origin:{
+      code:firstValue(data,"airport_origin_code_iata","airport_origin_code_icao","from_iata","from_icao"),
+      name:firstValue(data,"airport_origin_name","airport_origin_city","from_name","from_city")
     },
-    destination: {
-      code: firstValue(data, "airport_destination_code_iata", "airport_destination_code_icao", "to_iata", "to_icao"),
-      name: firstValue(data, "airport_destination_name", "airport_destination_city", "to_name", "to_city")
+    destination:{
+      code:firstValue(data,"airport_destination_code_iata","airport_destination_code_icao","to_iata","to_icao"),
+      name:firstValue(data,"airport_destination_name","airport_destination_city","to_name","to_city")
     }
   };
 }
-function displayAirport(airport, format) {
-  const code = airport?.code || "";
-  const name = airport?.name || "";
-  if (format === "name") return name || code;
-  if (format === "both") return code && name && code !== name ? code + " – " + name : code || name;
-  return code || name;
+// Airport code and name always occupy separate lines, with no arrow.
+function displayAirport(airport) {
+  const code=textValue(airport?.code),name=textValue(airport?.name);
+  return code||name ? {code,name:name!==code?name:""} : null;
 }
-function airportLabel(flight, options) {
-  const origin = options.show_origin_airport ? displayAirport(flight.origin, options.airport_format) : "";
-  const destination = options.show_destination_airport ? displayAirport(flight.destination, options.airport_format) : "";
-  if (origin && destination) return origin + " → " + destination;
-  if (origin) return "Von: " + origin;
-  if (destination) return "Nach: " + destination;
-  return "";
+function airportLabel(flight,options) {
+  const origin=options.show_origin_airport?displayAirport(flight.origin):null;
+  const destination=options.show_destination_airport?displayAirport(flight.destination):null;
+  return origin||destination ? {origin,destination} : null;
 }
 // A simple centred pass. Compass bearings are measured clockwise from north.
 function flyoverPath(width, height, shipSize, heading, bearing, direction) {
@@ -429,8 +498,17 @@ class FlightFlyoverCard extends HTMLElement {
       ".ff-label{position:relative;z-index:2;font:600 15px/1.35 Arial,sans-serif;" +
       "padding:6px 12px;margin-top:-72px;border-radius:9px;color:#fff;" +
       "background:rgba(14,27,43,.86);text-align:center;max-width:85vw;" +
-      "overflow:hidden;text-overflow:ellipsis;box-shadow:0 3px 9px rgba(0,0,0,.14)}" +
-      ".ff-route{font-size:12px;font-weight:400;margin-top:2px;white-space:nowrap}" +
+      "box-sizing:border-box;box-shadow:0 3px 9px rgba(0,0,0,.14)}" +
+      ".ff-label.ff-has-route{width:min(520px,calc(100vw - 28px))}" +
+      ".ff-route{display:grid;grid-template-columns:minmax(0,1fr) 16px minmax(0,1fr);" +
+      "align-items:center;gap:6px;margin-top:5px}" +
+      ".ff-route.ff-single{display:flex;justify-content:center}" +
+      ".ff-airport{min-width:0;display:flex;flex-direction:column;gap:2px}" +
+      ".ff-airport-code{font:700 14px/1.2 Arial,sans-serif;white-space:nowrap}" +
+      ".ff-airport-name{font:400 11px/1.25 Arial,sans-serif;opacity:.84;" +
+      "overflow-wrap:anywhere}" +
+      ".ff-route-divider{width:14px;height:1px;margin:auto;background:rgba(255,255,255,.4)}" +
+      ".ff-operator{margin-top:3px;font:500 11px/1.3 Arial,sans-serif;opacity:.85}" +
       ".ff-placeholder{font:80px/1 Arial,sans-serif;color:white;text-align:center;padding-top:30px}";
     layer.append(stylesheet);
     document.body.append(layer);
@@ -451,6 +529,8 @@ class FlightFlyoverCard extends HTMLElement {
         for(const candidate of modelCandidates(name)){
           try {
             const result=await loader.loadAsync(candidate.url);
+            if((name==="ADAC_H135"||name==="ADAC_H145")
+              && candidate.url.endsWith("/ec35/glTF2/EC35.glb")) paintRescueHelicopter(result.scene);
             // Rotate a dedicated pivot, never overwrite an imported glTF
             // root's existing rotation. Model-specific axes survive fallbacks.
             const scene=new THREE.Group();
@@ -488,9 +568,10 @@ class FlightFlyoverCard extends HTMLElement {
     ship.append(surface);
     const number=this._config.show_flight_number?entry.flight.number:"";
     const route=airportLabel(entry.flight,this._config);
-    if(number || route){
+    if(number||route||entry.flight.adac){
       const label=document.createElement("div");
       label.className="ff-label";
+      if(route)label.classList.add("ff-has-route");
       if(number){
         const title=document.createElement("div");
         title.textContent=number;
@@ -499,8 +580,38 @@ class FlightFlyoverCard extends HTMLElement {
       if(route){
         const line=document.createElement("div");
         line.className="ff-route";
-        line.textContent=route;
+        const makeAirport=(airport)=>{
+          const box=document.createElement("div");
+          box.className="ff-airport";
+          if(airport.code){
+            const code=document.createElement("div");
+            code.className="ff-airport-code";
+            code.textContent=airport.code;
+            box.append(code);
+          }
+          if(airport.name){
+            const name=document.createElement("div");
+            name.className="ff-airport-name";
+            name.textContent=airport.name;
+            box.append(name);
+          }
+          return box;
+        };
+        if(route.origin&&route.destination){
+          const separator=document.createElement("div");
+          separator.className="ff-route-divider";
+          line.append(makeAirport(route.origin),separator,makeAirport(route.destination));
+        }else{
+          line.classList.add("ff-single");
+          line.append(makeAirport(route.origin||route.destination));
+        }
         label.append(line);
+      }
+      if(entry.flight.adac){
+        const info=document.createElement("div");
+        info.className="ff-operator";
+        info.textContent="ADAC Luftrettung";
+        label.append(info);
       }
       ship.append(label);
     }
@@ -515,14 +626,13 @@ class FlightFlyoverCard extends HTMLElement {
     try {
       const [{THREE},loaded]=await Promise.all([this._getThree(),this._getModel(entry.flight.model)]);
       if(!this.isConnected || !this._active.has(entry.id))return;
+      const settings=renderSettings(this._config.size,this._config.render_quality);
       const renderer=new THREE.WebGLRenderer({
-        antialias:true,alpha:true,powerPreference:"low-power"
+        antialias:settings.antialias,alpha:true,powerPreference:"low-power"
       });
       context.renderer=renderer;
-      // Hardware MSAA smooths silhouette edges without increasing pixel count.
-      // Avoid supersampling here: it scales work with the square of the pixel ratio.
-      renderer.setPixelRatio(1);
-      renderer.setSize(this._config.size,Math.round(this._config.size/1.5),false);
+      renderer.setPixelRatio(settings.pixelRatio);
+      renderer.setSize(settings.width,settings.height,false);
       renderer.setClearColor(0x000000,0);
       renderer.outputColorSpace=THREE.SRGBColorSpace;
       renderer.toneMapping=THREE.ACESFilmicToneMapping;
@@ -605,15 +715,19 @@ const EDITOR_TEXT = {
     duration:"Flugdauer (Sek.)", topBearing:"Oben zeigt nach (°)",
     direction:"Flugrichtung", heading:"Automatisch", left:"Links", right:"Rechts",
     number:"Flugnummer", origin:"Startflughafen", destination:"Zielflughafen",
-    airportFormat:"Flughäfen als", code:"Kürzel", name:"Name", both:"Beides",
-    size:"Flugzeuggröße"
+    size:"Flugzeuggröße (px)", quality:"Grafikqualität",
+    performance:"Schnell · 1×, ohne Kantenglättung",
+    balanced:"Ausgewogen · 1×, mit Kantenglättung",
+    high:"Scharf · 1,5×, mit Kantenglättung"
   },
   en: {
     duration:"Flyover duration (sec)", topBearing:"Top of screen (°)",
     direction:"Direction", heading:"Automatic", left:"Left", right:"Right",
     number:"Flight number", origin:"Departure airport", destination:"Arrival airport",
-    airportFormat:"Airport format", code:"Code", name:"Name", both:"Both",
-    size:"Aircraft size"
+    size:"Aircraft size (px)", quality:"Rendering quality",
+    performance:"Fast · 1×, no antialiasing",
+    balanced:"Balanced · 1×, antialiasing",
+    high:"Sharp · 1.5×, antialiasing"
   }
 };
 class FlightFlyoverEditor extends HTMLElement {
@@ -647,7 +761,8 @@ class FlightFlyoverEditor extends HTMLElement {
       "border-radius:7px;background:var(--card-background-color,white);color:var(--primary-text-color,black);font:inherit}" +
       ".boolean{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--primary-text-color)}" +
       ".boolean input{width:18px;height:18px}" +
-      ".field input[type=range]{padding:0;height:30px;accent-color:var(--primary-color,#03a9f4)}";
+      ".field input[type=range]{padding:0;height:30px;accent-color:var(--primary-color,#03a9f4)}" +
+      ".ff-size-value{float:right;font-weight:400;color:var(--secondary-text-color,#777)}";
     shadow.append(css);
     const createField = (key, label, type, choices) => {
       const wrap = document.createElement("div");
@@ -668,11 +783,18 @@ class FlightFlyoverEditor extends HTMLElement {
         control.step = key === "screen_top_bearing" ? "any" : key === "size" ? "10" : "1";
         if (key !== "screen_top_bearing") {
           control.min = key === "size" ? "120" : "5";
-          control.max = key === "size" ? "700" : "90";
+          control.max = key === "size" ? "1200" : "90";
         }
       }
       control.value = this._config[key];
       control.addEventListener("change", () => this._change(key, control));
+      if(key==="size"){
+        const count=document.createElement("span");
+        count.className="ff-size-value";
+        count.textContent=String(control.value)+" px";
+        control.addEventListener("input",()=>{count.textContent=String(control.value)+" px";});
+        title.append(count);
+      }
       title.append(control);
       wrap.append(title);
       shadow.append(wrap);
@@ -693,12 +815,12 @@ class FlightFlyoverEditor extends HTMLElement {
       ["heading", strings.heading], ["left", strings.left], ["right", strings.right]
     ]);
     createField("size", strings.size, "range");
+    createField("render_quality", strings.quality, "select", [
+      ["performance", strings.performance], ["balanced", strings.balanced], ["quality", strings.high]
+    ]);
     check("show_flight_number", strings.number);
     check("show_origin_airport", strings.origin);
     check("show_destination_airport", strings.destination);
-    createField("airport_format", strings.airportFormat, "select", [
-      ["code", strings.code], ["name", strings.name], ["both", strings.both]
-    ]);
   }
   _change(key, control) {
     const value = control.type === "checkbox" ? control.checked
