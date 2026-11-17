@@ -594,10 +594,12 @@ class FlightFlyoverCard extends HTMLElement {
     const surface=document.createElement("div");
     surface.className="ff-scene";
     ship.append(surface);
+    let labelRef=null;
     const number=this._config.show_flight_number?entry.flight.number:"";
     const route=airportLabel(entry.flight,this._config);
     if(number||route||entry.flight.adac){
       const label=document.createElement("div");
+      labelRef=label;
       label.className="ff-label";
       // Keep the label visually close to the aircraft, but without allowing
       // large model sizes to push it into the 3D plane.
@@ -658,7 +660,7 @@ class FlightFlyoverCard extends HTMLElement {
       ship.append(label);
     }
     this._ensureLayer().append(ship);
-    return {ship,surface,label:ship.querySelector(".ff-label"),renderer:null,frame:0};
+    return {ship,surface,label:labelRef,renderer:null,frame:0};
   }
   async _begin(entry) {
     if(!this.isConnected || document.hidden || this._active.size>=MAX_ACTIVE) return;
