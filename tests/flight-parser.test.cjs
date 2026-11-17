@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
+const THREE = require("three");
 
 const source = fs.readFileSync("src/ha-flight-flyover-card.js", "utf8")
   .replace(/^import .*?;\s*$/gm, "");
@@ -23,11 +24,13 @@ const context = {
 vm.runInNewContext(source + "\n globalThis.testValues = {" +
   "modelFor,modelCandidates,normalizeNose,flyoverPath,flightPosition,describe," +
   "renderSettings,paintRescueHelicopter,helicopterLabelAnchor,projectedLabelOffset," +
+  "prepareHelicopterRotors,animateHelicopterRotors," +
   "displayAirport,airportLabel,configOf,aircraftYawForScreen,flyoverVisuals," +
   "FlightFlyoverCard,FlightFlyoverEditor};", context);
 const {
   modelFor, modelCandidates, normalizeNose, flyoverPath, flightPosition, describe,
   renderSettings, paintRescueHelicopter, helicopterLabelAnchor, projectedLabelOffset,
+  prepareHelicopterRotors, animateHelicopterRotors,
   displayAirport, airportLabel, configOf, aircraftYawForScreen, flyoverVisuals,
   FlightFlyoverCard, FlightFlyoverEditor
 } = context.testValues;
@@ -303,6 +306,77 @@ test("helicopter ICAO codes choose rotorcraft, never an Airbus fallback", () => 
   assert.ok(modelCandidates("B06")[0].url.endsWith("/bell206.glb"));
   assert.equal(modelCandidates("B06")[0].forward,"-X");
   assert.ok(modelCandidates("GAZL")[0].url.endsWith("/gazl/glTF2/GAZL.glb"));
+});
+
+test("H135 separate main and tail blades rotate around their true hubs", () => {
+  const root=new THREE.Group();
+  const imported=new THREE.Group();
+  imported.rotation.y=Math.PI/2;
+  root.add(imported);
+  const fuselage=new THREE.Mesh(new THREE.BoxGeometry(2,2,8));
+  fuselage.name="fuselage";
+  imported.add(fuselage);
+  const bladeNodes=[];
+  for(const name of ["blade1","blade1a","blade1b","blade2","blade3","blade4"]){
+    const blade=new THREE.Mesh(new THREE.BoxGeometry(.1,.05,1));
+    blade.name=name;
+    blade.position.set(-.077,3.085,-1.465);
+    imported.add(blade);
+    bladeNodes.push(blade);
+  }
+  const tail=new THREE.Mesh(new THREE.BoxGeometry(.07,1,1));
+  tail.name="Tblade";
+  tail.position.set(-.18,2.15,-7.26);
+  imported.add(tail);
+  root.updateWorldMatrix(true,true);
+  const all=[...bladeNodes,tail,fuselage];
+  const before=all.map(node=>node.getWorldPosition(new THREE.Vector3()).clone());
+  const rotors=prepareHelicopterRotors(root,THREE);
+  assert.equal(rotors.length,2);
+  assert.equal(rotors[0].pivot.name,"flyover-main-rotor");
+  assert.equal(rotors[1].pivot.name,"flyover-tail-rotor");
+  assert.equal(rotors[0].axis,"y");
+  assert.equal(rotors[1].axis,"x");
+  assert.equal(rotors[0].pivot.children.length,6);
+  assert.equal(rotors[1].pivot.children.length,1);
+  root.updateWorldMatrix(true,true);
+  for(const [index,node] of all.entries()){
+    const after=node.getWorldPosition(new THREE.Vector3());
+    assert.ok(after.distanceTo(before[index])<1e-5,node.name+" should not jump");
+  }
+  animateHelicopterRotors(rotors,500);
+  assert.ok(Math.abs(rotors[0].pivot.rotation.y)>.5);
+  assert.ok(Math.abs(rotors[1].pivot.rotation.x)>.5);
+  assert.equal(fuselage.rotation.x,0);
+  assert.equal(fuselage.rotation.y,0);
+  const halfway=rotors.map(x=>x.pivot.rotation[x.axis]);
+  animateHelicopterRotors(rotors,1000);
+  assert.ok(Math.abs(rotors[0].pivot.rotation.y-halfway[0])>1);
+  assert.ok(Math.abs(rotors[1].pivot.rotation.x-halfway[1])>1);
+  assert.equal(tail.parent,rotors[1].pivot);
+  assert.equal(bladeNodes[0].parent,rotors[0].pivot);
+});
+
+test("merged helicopter assets do not accidentally spin the fuselage", () => {
+  const scene=new THREE.Group();
+  const merged=new THREE.Mesh(new THREE.BoxGeometry(12,4,14));
+  merged.name="tailrotor"; // Bell 407 merged model: this contains the whole helicopter
+  scene.add(merged);
+  const rotors=prepareHelicopterRotors(scene,THREE);
+  assert.equal(rotors.length,0);
+  animateHelicopterRotors(rotors,1200);
+  assert.equal(merged.parent,scene);
+  assert.equal(merged.rotation.x,0);
+  assert.equal(merged.rotation.y,0);
+});
+
+test("rotors spin using animation timestamps, without per-frame mesh traversal", () => {
+  const source=fs.readFileSync("src/ha-flight-flyover-card.js","utf8");
+  assert.match(source,/context\.rotors=prepareHelicopterRotors\(airplane,THREE\)/);
+  assert.match(source,/animateHelicopterRotors\(context\.rotors,time-context\.startedAt\)/);
+  assert.match(source,/\^blade\[1-4\]/);
+  assert.match(source,/\^Tblade\$/);
+  assert.doesNotMatch(source,/setInterval|setTimeout/);
 });
 
 test("ADAC yellow rescue model requires explicit operator or demo code", () => {
