@@ -94,12 +94,12 @@ function worldLandmarks(glb) {
     for(const child of node.children||[])visit(child,matrix);
   };
   for(const idx of (glb.scenes?.[glb.scene||0]?.nodes || []))visit(idx,new THREE.Matrix4());
-  const matches=result.filter(x=>/(nose|front|tail|rudder|fin|cockpit|windscreen|windshield|spinner|prop|fuselage|stabiliz|hstab|vstab|radome|avionic|cab[in]|intake)/i.test(x.name));
+  const matches=result.filter(x=>/(nose|front|tail|rudder|fin|cockpit|windscreen|windshield|spinner|prop|fuselage|stabiliz|hstab|vstab|radome|avionic|cab[in]|intake|blade|rotor)/i.test(x.name));
   const world=new THREE.Box3();
   for(const x of result) world.union(new THREE.Box3(new THREE.Vector3(...x.min),new THREE.Vector3(...x.max)));
   return {total:result.length,worldSize:world.getSize(new THREE.Vector3()).toArray().map(x=>+x.toFixed(2)),
     worldMin:world.min.toArray().map(x=>+x.toFixed(2)),worldMax:world.max.toArray().map(x=>+x.toFixed(2)),
-    landmarks:matches.slice(0,30),head:result.slice(0,3)};
+    landmarks:matches.slice(0,85),head:result.slice(0,3)};
 }
 function summary(glb) {
   const accessors=glb.accessors||[];
