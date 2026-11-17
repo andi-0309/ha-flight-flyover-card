@@ -172,6 +172,51 @@ function helicopterLabelAnchor(plane, THREE) {
 function projectedLabelOffset(normalizedDeviceX, canvasWidth) {
   return normalizedDeviceX*canvasWidth/2;
 }
+// The FlightAirMap EC135/H135 GLB contains twenty independently modeled
+// blade sections ("blade1" ... "blade4d") and one separate tail blade ("Tblade").
+// Re-parent those sections under two lightweight pivots ONCE per flight.
+// Other GLBs merge the fuselage and rotor into one mesh: never spin that mesh.
+const MAIN_ROTOR_RPS = 2.8; // Visibly animated, without extreme aliasing on 30 fps kiosks
+const TAIL_ROTOR_RPS = 7.1;
+function prepareHelicopterRotors(aircraft, THREE) {
+  const blades=[], tail=[];
+  aircraft.updateWorldMatrix(true,true);
+  aircraft.traverse((part)=>{
+    if(!part.isMesh)return;
+    if(/^blade[1-4][a-d]?$/i.test(part.name))blades.push(part);
+    else if(/^Tblade$/i.test(part.name))tail.push(part);
+  });
+  const rotors=[];
+  // Main blade sections share a model-space hub, but not a common parent.
+  if(blades.length>=4 && blades.every(part=>part.parent===blades[0].parent)) {
+    const parent=blades[0].parent;
+    const pivot=new THREE.Group();
+    pivot.name="flyover-main-rotor";
+    pivot.position.copy(blades[0].position);
+    parent.add(pivot);
+    for(const blade of blades)pivot.attach(blade);
+    rotors.push({pivot,axis:"y",rate:MAIN_ROTOR_RPS,initial:pivot.rotation.y});
+  }
+  // The H135 fenestron blade is a separate mesh. Rotate about its local
+  // side-facing X axis at the blade's actual geometric center.
+  if(tail.length===1 && tail[0].parent) {
+    const blade=tail[0],parent=blade.parent;
+    aircraft.updateWorldMatrix(true,true);
+    const center=new THREE.Box3().setFromObject(blade).getCenter(new THREE.Vector3());
+    const pivot=new THREE.Group();
+    pivot.name="flyover-tail-rotor";
+    pivot.position.copy(parent.worldToLocal(center));
+    parent.add(pivot);
+    pivot.attach(blade);
+    rotors.push({pivot,axis:"x",rate:-TAIL_ROTOR_RPS,initial:pivot.rotation.x});
+  }
+  return rotors;
+}
+function animateHelicopterRotors(rotors, elapsedMs) {
+  const seconds=Math.max(0,elapsedMs)/1000;
+  for(const rotor of rotors)
+    rotor.pivot.rotation[rotor.axis]=rotor.initial+seconds*rotor.rate*2*Math.PI;
+}
 function normalizeNose(angle) {
   // All third-party GLBs are rotated onto our +X-forward convention so that
   // aircraftYawForScreen() keeps the nose pointed along the actual flight path.
@@ -695,6 +740,9 @@ class FlightFlyoverCard extends HTMLElement {
       scene.add(rim);
       airplane=loaded;
       scene.add(airplane);
+      if(HELICOPTER_TYPES.has(entry.flight.model)){
+        context.rotors=prepareHelicopterRotors(airplane,THREE);
+      }
       if(HELICOPTER_TYPES.has(entry.flight.model) && context.label){
         context.helicopterAnchor=helicopterLabelAnchor(airplane,THREE);
         context.projectedAnchor=new THREE.Vector3();
@@ -736,6 +784,8 @@ class FlightFlyoverCard extends HTMLElement {
         airplane.rotation.y=aircraftYawForScreen(entry.plan.dx,entry.plan.dy,visuals.tiltScale);
         airplane.rotation.x=Math.sin(t*Math.PI)*.04;
         airplane.rotation.z=0;
+        if(context.rotors?.length)
+          animateHelicopterRotors(context.rotors,time-context.startedAt);
         if(context.helicopterAnchor){
           // Only project one precomputed point; no mesh traversal per frame.
           airplane.updateWorldMatrix(true,false);
