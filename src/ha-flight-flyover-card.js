@@ -495,20 +495,30 @@ class FlightFlyoverCard extends HTMLElement {
       ".ff-scene{position:relative;width:100%;aspect-ratio:1.5}" +
       ".ff-scene canvas{display:block;width:100%;height:100%;" +
       "filter:drop-shadow(0 14px 9px rgba(15,27,42,.14))}" +
-      ".ff-label{position:relative;z-index:2;font:600 15px/1.35 Arial,sans-serif;" +
-      "padding:6px 12px;margin-top:-72px;border-radius:9px;color:#fff;" +
-      "background:rgba(14,27,43,.86);text-align:center;max-width:85vw;" +
-      "box-sizing:border-box;box-shadow:0 3px 9px rgba(0,0,0,.14)}" +
-      ".ff-label.ff-has-route{width:min(520px,calc(100vw - 28px))}" +
-      ".ff-route{display:grid;grid-template-columns:minmax(0,1fr) 16px minmax(0,1fr);" +
-      "align-items:center;gap:6px;margin-top:5px}" +
+      ".ff-label{position:relative;z-index:2;box-sizing:border-box;flex-shrink:0;" +
+      "max-width:min(350px,calc(100vw - 24px));padding:9px 12px 10px;" +
+      "border:1px solid rgba(208,224,237,.13);border-radius:12px;color:#f7fbff;" +
+      "background:rgba(15,27,42,.94);text-align:center;" +
+      "font:600 13px/1.25 Arial,sans-serif;box-shadow:0 5px 12px rgba(0,0,0,.17)}" +
+      ".ff-label.ff-has-route{width:min(340px,calc(100vw - 24px))}" +
+      ".ff-label.ff-single-route{width:min(220px,calc(100vw - 24px))}" +
+      ".ff-label.ff-number-only{padding:6px 10px;border-radius:10px}" +
+      ".ff-number{display:table;margin:0 auto;color:#eef5fc;" +
+      "background:rgba(117,153,182,.18);border-radius:999px;" +
+      "padding:3px 10px;font:700 12px/1.4 Arial,sans-serif;letter-spacing:.035em}" +
+      ".ff-route{display:grid;grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr);" +
+      "align-items:center;column-gap:5px;margin-top:7px}" +
       ".ff-route.ff-single{display:flex;justify-content:center}" +
-      ".ff-airport{min-width:0;display:flex;flex-direction:column;gap:2px}" +
-      ".ff-airport-code{font:700 14px/1.2 Arial,sans-serif;white-space:nowrap}" +
-      ".ff-airport-name{font:400 11px/1.25 Arial,sans-serif;opacity:.84;" +
-      "overflow-wrap:anywhere}" +
-      ".ff-route-divider{width:14px;height:1px;margin:auto;background:rgba(255,255,255,.4)}" +
-      ".ff-operator{margin-top:3px;font:500 11px/1.3 Arial,sans-serif;opacity:.85}" +
+      ".ff-airport{min-width:0;display:flex;flex-direction:column;gap:3px;align-items:center}" +
+      ".ff-airport-code{font:700 20px/1.1 Arial,sans-serif;letter-spacing:.015em;white-space:nowrap}" +
+      ".ff-airport-name{font:400 12px/1.25 Arial,sans-serif;color:rgba(220,235,246,.78);" +
+      "overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;" +
+      "-webkit-box-orient:vertical;max-width:100%}" +
+      ".ff-connection{display:flex;align-items:center;justify-content:center;gap:3px;" +
+      "color:rgba(194,213,229,.72);min-width:0}" +
+      ".ff-connection-line{width:8px;height:1px;flex-shrink:0;background:rgba(194,213,229,.35)}" +
+      ".ff-connection-icon{font:400 14px/1 Arial,sans-serif}" +
+      ".ff-operator{margin-top:5px;font:500 11px/1.3 Arial,sans-serif;opacity:.82}" +
       ".ff-placeholder{font:80px/1 Arial,sans-serif;color:white;text-align:center;padding-top:30px}";
     layer.append(stylesheet);
     document.body.append(layer);
@@ -571,9 +581,15 @@ class FlightFlyoverCard extends HTMLElement {
     if(number||route||entry.flight.adac){
       const label=document.createElement("div");
       label.className="ff-label";
-      if(route)label.classList.add("ff-has-route");
+      // Keep the label visually close to the aircraft, but without allowing
+      // large model sizes to push it into the 3D plane.
+      label.style.marginTop=-Math.min(112,Math.max(34,this._config.size*.31))+"px";
+      if(route?.origin&&route?.destination)label.classList.add("ff-has-route");
+      else if(route)label.classList.add("ff-single-route");
+      else if(!entry.flight.adac)label.classList.add("ff-number-only");
       if(number){
         const title=document.createElement("div");
+        title.className="ff-number";
         title.textContent=number;
         label.append(title);
       }
@@ -598,9 +614,17 @@ class FlightFlyoverCard extends HTMLElement {
           return box;
         };
         if(route.origin&&route.destination){
-          const separator=document.createElement("div");
-          separator.className="ff-route-divider";
-          line.append(makeAirport(route.origin),separator,makeAirport(route.destination));
+          const connection=document.createElement("div");
+          connection.className="ff-connection";
+          const left=document.createElement("span");
+          left.className="ff-connection-line";
+          const symbol=document.createElement("span");
+          symbol.className="ff-connection-icon";
+          symbol.textContent=HELICOPTER_TYPES.has(entry.flight.model)?"✣":"✈";
+          const right=document.createElement("span");
+          right.className="ff-connection-line";
+          connection.append(left,symbol,right);
+          line.append(makeAirport(route.origin),connection,makeAirport(route.destination));
         }else{
           line.classList.add("ff-single");
           line.append(makeAirport(route.origin||route.destination));
