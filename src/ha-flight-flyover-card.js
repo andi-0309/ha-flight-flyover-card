@@ -154,6 +154,24 @@ function renderSettings(size,quality) {
     : {pixelRatio:1,antialias:true};
   return {width,height:Math.round(width/1.5),...profile};
 }
+// Rotor geometry can be much wider than a helicopter's cabin. Align its
+// information label with the projected fuselage rather than the canvas center.
+// Calculate the anchor only once; its projected X is updated with the camera.
+function helicopterLabelAnchor(plane, THREE) {
+  let body=null;
+  plane.updateWorldMatrix(true,true);
+  plane.traverse((object) => {
+    if (!object.isMesh || !/^fuselage(?:[._-]|$)/i.test(object.name||"")) return;
+    if (!body) body=object;
+  });
+  if (!body) return null;
+  const bounds=new THREE.Box3().setFromObject(body);
+  if (bounds.isEmpty()) return null;
+  return plane.worldToLocal(bounds.getCenter(new THREE.Vector3()));
+}
+function projectedLabelOffset(normalizedDeviceX, canvasWidth) {
+  return normalizedDeviceX*canvasWidth/2;
+}
 function normalizeNose(angle) {
   // All third-party GLBs are rotated onto our +X-forward convention so that
   // aircraftYawForScreen() keeps the nose pointed along the actual flight path.
@@ -640,7 +658,7 @@ class FlightFlyoverCard extends HTMLElement {
       ship.append(label);
     }
     this._ensureLayer().append(ship);
-    return {ship,surface,renderer:null,frame:0};
+    return {ship,surface,label:ship.querySelector(".ff-label"),renderer:null,frame:0};
   }
   async _begin(entry) {
     if(!this.isConnected || document.hidden || this._active.size>=MAX_ACTIVE) return;
@@ -675,6 +693,10 @@ class FlightFlyoverCard extends HTMLElement {
       scene.add(rim);
       airplane=loaded;
       scene.add(airplane);
+      if(HELICOPTER_TYPES.has(entry.flight.model) && context.label){
+        context.helicopterAnchor=helicopterLabelAnchor(airplane,THREE);
+        context.projectedAnchor=new THREE.Vector3();
+      }
       camera=new THREE.PerspectiveCamera(36,1.5,.1,1000);
       camera.up.set(0,0,-1);
     } catch(error) {
@@ -712,6 +734,15 @@ class FlightFlyoverCard extends HTMLElement {
         airplane.rotation.y=aircraftYawForScreen(entry.plan.dx,entry.plan.dy,visuals.tiltScale);
         airplane.rotation.x=Math.sin(t*Math.PI)*.04;
         airplane.rotation.z=0;
+        if(context.helicopterAnchor){
+          // Only project one precomputed point; no mesh traversal per frame.
+          airplane.updateWorldMatrix(true,false);
+          camera.updateMatrixWorld();
+          context.projectedAnchor.copy(context.helicopterAnchor)
+            .applyMatrix4(airplane.matrixWorld).project(camera);
+          const offset=projectedLabelOffset(context.projectedAnchor.x,size);
+          context.label.style.transform="translate3d("+offset.toFixed(2)+"px,0,0)";
+        }
         context.renderer.render(scene,camera);
       }else{
         context.surface.style.transform="scale("+visuals.fallbackScale.toFixed(3)+")";
