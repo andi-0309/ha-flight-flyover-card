@@ -116,8 +116,6 @@ function normalizeNose(angle) {
   return ({"+X":0,"-Z":-Math.PI/2,"-X":Math.PI,"+Z":Math.PI/2})[angle] ?? 0;
 }
 const MAX_ACTIVE = 3; // Keep the number of WebGL contexts bounded on kiosks.
-const TRAIL_LIFETIME_MS = 5000;
-const SVG_NS = "http://www.w3.org/2000/svg";
 const DEFAULTS = Object.freeze({
   duration: 20,
   screen_top_bearing: 0,
@@ -126,7 +124,6 @@ const DEFAULTS = Object.freeze({
   show_origin_airport: true,
   show_destination_airport: true,
   airport_format: "code",
-  show_contrails: true,
   size: 330
 });
 function textValue(value) {
@@ -158,7 +155,6 @@ function configOf(input = {}) {
     show_origin_airport: input.show_origin_airport !== false,
     show_destination_airport: input.show_destination_airport !== false,
     airport_format: choice(input.airport_format, ["code", "name", "both"], DEFAULTS.airport_format),
-    show_contrails: input.show_contrails !== false,
     size: clamp(input.size, 120, 700, DEFAULTS.size)
   };
 }
@@ -349,7 +345,6 @@ class FlightFlyoverCard extends HTMLElement {
     this._seen = new Map();
     this._modelPromises = new Map();
     this._threePromise = null;
-    this._trailCounter = 0;
   }
   setConfig(config) {
     if (!config || typeof config !== "object") throw Error("Card configuration is required");
@@ -375,7 +370,6 @@ class FlightFlyoverCard extends HTMLElement {
     this._seen.clear();
     this._layer?.remove();
     this._layer = null;
-    this._trailsRoot = null;
     this._modelPromises.clear();
     this._threePromise = null;
   }
@@ -438,76 +432,10 @@ class FlightFlyoverCard extends HTMLElement {
       "overflow:hidden;text-overflow:ellipsis;box-shadow:0 3px 9px rgba(0,0,0,.14)}" +
       ".ff-route{font-size:12px;font-weight:400;margin-top:2px;white-space:nowrap}" +
       ".ff-placeholder{font:80px/1 Arial,sans-serif;color:white;text-align:center;padding-top:30px}";
-    const trails = document.createElementNS(SVG_NS, "svg");
-    trails.setAttribute("viewBox", "0 0 " + window.innerWidth + " " + window.innerHeight);
-    trails.setAttribute("preserveAspectRatio", "none");
-    trails.style.cssText = "position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none";
-    layer.append(stylesheet, trails);
+    layer.append(stylesheet);
     document.body.append(layer);
     this._layer=layer;
-    this._trailsRoot=trails;
     return layer;
-  }
-  _createTrails() {
-    if (!this._config.show_contrails) return null;
-    this._ensureLayer();
-    const group=document.createElementNS(SVG_NS,"g");
-    const gradient=document.createElementNS(SVG_NS,"linearGradient");
-    gradient.setAttribute("id","flight-trail-"+(++this._trailCounter)+"-"+Math.floor(performance.now()));
-    gradient.setAttribute("gradientUnits","userSpaceOnUse");
-    for(const [offset,opacity] of [["0%","0"],["35%","0.13"],["100%","0.56"]]){
-      const stop=document.createElementNS(SVG_NS,"stop");
-      stop.setAttribute("offset",offset);
-      stop.setAttribute("stop-color","#edf8ff");
-      stop.setAttribute("stop-opacity",opacity);
-      gradient.append(stop);
-    }
-    const defs=document.createElementNS(SVG_NS,"defs");
-    defs.append(gradient);
-    group.append(defs);
-    const paths=[];
-    for(let i=0;i<2;i++){
-      const path=document.createElementNS(SVG_NS,"path");
-      path.setAttribute("fill","none");
-      path.setAttribute("stroke","url(#"+gradient.getAttribute("id")+")");
-      path.setAttribute("stroke-width","5");
-      path.setAttribute("stroke-linecap","round");
-      path.setAttribute("stroke-linejoin","round");
-      path.style.filter="blur(1.6px)";
-      group.append(path);
-      paths.push(path);
-    }
-    this._trailsRoot.append(group);
-    return {group,gradient,paths,samples:[[],[]],lastSample:-Infinity};
-  }
-  _drawTrails(context, plan, progress, time) {
-    const trails=context.trails;
-    if(!trails || time-trails.lastSample < 85) return;
-    trails.lastSample=time;
-    const pos=flightPosition(plan,progress);
-    const normalX=-plan.dy,normalY=plan.dx;
-    const rear=this._config.size*.07;
-    const separation=this._config.size*.115;
-    for(let i=0;i<2;i++){
-      const side=i===0?-1:1;
-      const px=pos.x-plan.dx*rear+normalX*separation*side;
-      const py=pos.y-plan.dy*rear+normalY*separation*side;
-      const samples=trails.samples[i];
-      samples.push({x:px,y:py,time});
-      while(samples.length && time-samples[0].time>TRAIL_LIFETIME_MS) samples.shift();
-      if(samples.length>1){
-        const d=samples.map((p,j)=>(j?"L":"M")+p.x.toFixed(2)+","+p.y.toFixed(2)).join(" ");
-        trails.paths[i].setAttribute("d",d);
-      }
-    }
-    const points=trails.samples[0];
-    if(points.length>1){
-      const first=points[0],last=points[points.length-1];
-      trails.gradient.setAttribute("x1",String(first.x));
-      trails.gradient.setAttribute("y1",String(first.y));
-      trails.gradient.setAttribute("x2",String(last.x));
-      trails.gradient.setAttribute("y2",String(last.y));
-    }
   }
   _getThree() {
     // Both imports above are resolved from the SAME npm three package by
@@ -577,7 +505,7 @@ class FlightFlyoverCard extends HTMLElement {
       ship.append(label);
     }
     this._ensureLayer().append(ship);
-    return {ship,surface,renderer:null,frame:0,trails:this._createTrails()};
+    return {ship,surface,renderer:null,frame:0};
   }
   async _begin(entry) {
     if(!this.isConnected || document.hidden || this._active.size>=MAX_ACTIVE) return;
@@ -652,7 +580,6 @@ class FlightFlyoverCard extends HTMLElement {
       }else{
         context.surface.style.transform="scale("+visuals.fallbackScale.toFixed(3)+")";
       }
-      this._drawTrails(context,entry.plan,t,time);
       if(t<1)context.frame=requestAnimationFrame(draw);
       else this._removeActive(entry.id);
     };
@@ -665,12 +592,6 @@ class FlightFlyoverCard extends HTMLElement {
     context.renderer?.dispose();
     context.renderer?.forceContextLoss();
     context.ship.remove();
-    if(context.trails){
-      const group=context.trails.group;
-      group.style.transition="opacity 4000ms ease-out";
-      group.style.opacity="0";
-      setTimeout(()=>group.remove(),4100);
-    }
     this._active.delete(id);
   }
   static getConfigElement() { return document.createElement(EDITOR_TAG); }
@@ -683,14 +604,14 @@ const EDITOR_TEXT = {
     direction:"Flugrichtung", heading:"Automatisch", left:"Links", right:"Rechts",
     number:"Flugnummer", origin:"Startflughafen", destination:"Zielflughafen",
     airportFormat:"Flughäfen als", code:"Kürzel", name:"Name", both:"Beides",
-    size:"Flugzeuggröße", trails:"Kondensstreifen"
+    size:"Flugzeuggröße"
   },
   en: {
     duration:"Flyover duration (sec)", topBearing:"Top of screen (°)",
     direction:"Direction", heading:"Automatic", left:"Left", right:"Right",
     number:"Flight number", origin:"Departure airport", destination:"Arrival airport",
     airportFormat:"Airport format", code:"Code", name:"Name", both:"Both",
-    size:"Aircraft size", trails:"Contrails"
+    size:"Aircraft size"
   }
 };
 class FlightFlyoverEditor extends HTMLElement {
@@ -770,7 +691,6 @@ class FlightFlyoverEditor extends HTMLElement {
       ["heading", strings.heading], ["left", strings.left], ["right", strings.right]
     ]);
     createField("size", strings.size, "range");
-    check("show_contrails", strings.trails);
     check("show_flight_number", strings.number);
     check("show_origin_airport", strings.origin);
     check("show_destination_airport", strings.destination);
@@ -799,7 +719,7 @@ if (!window.customCards.some((card) => card.type === TAG)) {
     name: "Flight Flyover",
     icon: "mdi:airplane",
     preview: false,
-    description: "3D aircraft flyovers with flight details and fading contrails.",
+    description: "3D aircraft flyovers with real aircraft models and flight details.",
     documentationURL: "https://github.com/andi-0309/ha-flight-flyover-card#readme"
   });
 }
