@@ -16,7 +16,7 @@
 
 - Real aircraft models for Airbus, Boeing, Embraer, regional jets and light aircraft
 - Smooth **20-second flyovers** triggered by Flightradar24
-- Camera zoom, natural lighting, subtle shadow and fading contrails
+- Camera zoom, natural lighting and a subtle aircraft shadow
 - Flight number, departure and destination airports
 - Easy configuration in the **visual card editor**
 
@@ -37,7 +37,6 @@ No YAML required. Optional example:
 type: custom:ha-flight-flyover-card
 duration: 20
 screen_top_bearing: 0
-show_contrails: true
 airport_format: code
 ```
 
